@@ -253,6 +253,9 @@ const API = {
   },
 
   isMonitoredComp(fixture) {
+    // ESPN já popula _leagueId diretamente
+    if (fixture._leagueId) return true;
+    // Fallback: tenta pelo nome
     const name = fixture.tournament?.name || '';
     return this.getTournamentId(name) !== null;
   },

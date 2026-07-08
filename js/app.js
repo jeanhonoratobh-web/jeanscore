@@ -167,7 +167,10 @@ Object.assign(APP, {
     let fixtures = this.allFixtures.filter(f => API.isMonitoredComp(f));
 
     if (compFilter !== 'all') {
-      fixtures = fixtures.filter(f => String(API.getTournamentId(f.tournament?.name || '')) === String(compFilter));
+      fixtures = fixtures.filter(f => {
+        const id = f._leagueId || API.getTournamentId(f.tournament?.name || '');
+        return String(id) === String(compFilter);
+      });
     }
 
     let filtered;
