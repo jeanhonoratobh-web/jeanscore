@@ -31,6 +31,7 @@ function doPost(e) {
       getGameScores:   () => getGameScores(payload),
       submitGameScore: () => submitGameScore(payload),
       getUserGameScores: () => getUserGameScores(payload),
+      updateUserHash:  () => updateUserHash(payload),
     };
 
     if (!handlers[action]) return jsonResponse({ ok: false, error: 'Ação inválida' });
@@ -43,6 +44,34 @@ function doPost(e) {
 // ── Entry point GET (para testes) ──
 function doGet(e) {
   return jsonResponse({ ok: true, message: 'JeanScore API online' });
+}
+
+// ── Roda uma vez para criar o admin inicial ──
+// Execute manualmente no Apps Script: Executar > setupAdmin
+function setupAdmin() {
+  const sheet = getSheet(SHEETS_NAMES.USERS);
+  const data  = sheet.getDataRange().getValues();
+
+  // Hash SHA-256 de "jean2025" — mesmo algoritmo do browser (Web Crypto API)
+  const passHash = computeSHA256('jean2025');
+
+  // Verifica se admin já existe — atualiza o hash se necessário
+  for (let i = 1; i < data.length; i++) {
+    if (data[i][0] === 'Jean') {
+      sheet.getRange(i + 1, 3).setValue(passHash);
+      Logger.log('Hash do admin atualizado: ' + passHash);
+      return;
+    }
+  }
+
+  // Cria novo admin
+  sheet.appendRow(['Jean', 'jean.honorato.bh@gmail.com', passHash, 'admin', 'approved', new Date().toISOString()]);
+  Logger.log('Admin criado! Hash: ' + passHash);
+}
+
+function computeSHA256(message) {
+  const digest = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, message, Utilities.Charset.UTF_8);
+  return digest.map(b => (b < 0 ? b + 256 : b).toString(16).padStart(2, '0')).join('');
 }
 
 function jsonResponse(data) {
@@ -135,6 +164,18 @@ function _updateUserStatus(username, status) {
   for (let i = 1; i < data.length; i++) {
     if (data[i][0] === username) {
       sheet.getRange(i + 1, 5).setValue(status);
+      return { ok: true };
+    }
+  }
+  return { ok: false, error: 'Usuário não encontrado' };
+}
+
+function updateUserHash({ username, passHash }) {
+  const sheet = getSheet(SHEETS_NAMES.USERS);
+  const data  = sheet.getDataRange().getValues();
+  for (let i = 1; i < data.length; i++) {
+    if (data[i][0] === username) {
+      sheet.getRange(i + 1, 3).setValue(passHash);
       return { ok: true };
     }
   }
