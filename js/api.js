@@ -120,7 +120,6 @@ const API = {
 
     const all = [];
     const seen = new Set();
-
     results.forEach((data, i) => {
       const league = this.ESPN_LEAGUES[i];
       const leagueInfo = this.ESPN_LEAGUE_MAP[league] || {};
@@ -168,10 +167,32 @@ const API = {
       });
     });
 
+    // Adiciona jogos manuais (localStorage)
+    try {
+      const manual = JSON.parse(localStorage.getItem('js_manualJogos') || '[]');
+      manual.forEach(j => {
+        if (seen.has(j.id)) return;
+        seen.add(j.id);
+        const leagueInfo = CONFIG.COMPETITIONS[j.leagueId] || {};
+        all.push({
+          id:          j.id,
+          homeTeam:    { name: j.home, id: null, logo: '' },
+          awayTeam:    { name: j.away, id: null, logo: '' },
+          homeScore:   { current: j.homeScore },
+          awayScore:   { current: j.awayScore },
+          status:      { type: j.status || 'notstarted' },
+          startTimestamp: j.timestamp,
+          tournament:  { name: leagueInfo.name || j.leagueName, id: j.leagueId },
+          _leagueId:   j.leagueId,
+          _manual:     true,
+        });
+      });
+    } catch(e) {}
+
     return all.sort((a, b) => a.startTimestamp - b.startTimestamp);
   },
 
-  _espnStatusToSofa(espnStatus, eventDate, homeScore, awayScore) {
+  _espnStatusToSofa
     // Se tem status explícito, usa ele
     if (espnStatus) {
       const s = espnStatus.toLowerCase();
@@ -191,7 +212,22 @@ const API = {
   },
 
   async getLineup(fixtureId) {
-    // ESPN não tem escalação detalhada gratuita — usa Apps Script se disponível
+    // Primeiro verifica escalação manual (localStorage)
+    try {
+      const escalacoes = JSON.parse(localStorage.getItem('js_escalacoes') || '{}');
+      const playerIds  = escalacoes[fixtureId];
+      if (playerIds && playerIds.length > 0) {
+        // Busca dados completos do squad
+        const squad = window.APP?.squad || [];
+        const participated = playerIds.map(id => {
+          const p = squad.find(s => String(s.id) === String(id));
+          return p ? { id: p.id, name: p.name, pos: p.position, played: true, starter: true } : null;
+        }).filter(Boolean);
+        if (participated.length > 0) return { participated, all: participated };
+      }
+    } catch(e) {}
+
+    // ESPN não tem escalação — usa Apps Script se disponível
     if (isSheetsConfigured()) {
       try {
         const res = await fetch(CONFIG.SHEETS_API_URL, {
@@ -200,9 +236,12 @@ const API = {
           body: JSON.stringify({ action: 'getLineup', fixtureId }),
         });
         const data = await res.json();
-        if (data.ok) return { participated: data.participated || [], all: data.all || [] };
+        if (data.ok && data.participated?.length) {
+          return { participated: data.participated, all: data.all || data.participated };
+        }
       } catch(e) {}
     }
+
     return { participated: [], all: [] };
   },
 

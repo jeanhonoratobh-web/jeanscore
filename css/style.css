@@ -736,3 +736,69 @@ body {
   grid-column: 1 / -1;
 }
 .empty-state i { font-size: 2.5rem; display: block; margin-bottom: 0.75rem; opacity: 0.5; }
+
+/* ── ADMIN JOGOS ── */
+.card-dark {
+  background: linear-gradient(145deg, #1a2f55, #0d1e3a);
+  border-radius: var(--radius);
+  border: 1px solid rgba(255,255,255,0.07);
+  padding: 1.25rem;
+  margin-bottom: 1rem;
+}
+.card-dark h3 {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--gold);
+  margin-bottom: 1rem;
+}
+.admin-jogos-wrap { display: flex; flex-direction: column; gap: 0; }
+.form-row {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.75rem;
+}
+.form-row .form-group { flex: 1; min-width: 140px; margin-bottom: 0; }
+.select-dark {
+  width: 100%;
+  padding: 0.6rem 0.9rem;
+  background: rgba(255,255,255,0.07);
+  border: 1.5px solid rgba(255,255,255,0.15);
+  border-radius: 8px;
+  color: var(--white);
+  font-size: 0.95rem;
+}
+.select-dark:focus { outline: none; border-color: var(--gold); }
+.select-dark option { background: #1a2f55; color: var(--white); }
+
+/* ── ESCALAÇÃO GRID ── */
+.escalacao-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 0.75rem;
+  max-height: 50vh;
+  overflow-y: auto;
+}
+.escalacao-card {
+  background: rgba(255,255,255,0.04);
+  border-radius: 8px;
+  border: 2px solid transparent;
+  padding: 0.6rem;
+  text-align: center;
+  cursor: pointer;
+  transition: var(--transition);
+  user-select: none;
+}
+.escalacao-card:hover { border-color: rgba(245,158,11,0.4); }
+.escalacao-card.selected { border-color: var(--gold); background: rgba(245,158,11,0.1); }
+.escalacao-card img {
+  width: 48px; height: 48px;
+  border-radius: 50%;
+  object-fit: cover;
+  object-position: top;
+  margin: 0 auto 0.4rem;
+  display: block;
+  background: var(--blue-mid);
+}
+.escalacao-card-name { font-size: 0.75rem; font-weight: 600; }
+.escalacao-card-pos  { font-size: 0.68rem; color: var(--gold); }

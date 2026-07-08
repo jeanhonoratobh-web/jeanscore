@@ -127,6 +127,7 @@
           <button class="tab-btn active" data-admin-tab="pendentes">Cadastros Pendentes</button>
           <button class="tab-btn" data-admin-tab="usuarios">Usuários</button>
           <button class="tab-btn" data-admin-tab="notas">Notas Principais</button>
+          <button class="tab-btn" data-admin-tab="jogos">Cadastrar Jogo</button>
         </div>
         <div id="adminContent" class="admin-content">
           <div id="admin-pendentes">
@@ -138,7 +139,86 @@
           <div id="admin-notas" style="display:none">
             <div id="notasAdminList" class="players-grid"></div>
           </div>
+          <div id="admin-jogos" style="display:none">
+            <div class="admin-jogos-wrap">
+              <!-- Formulário de cadastro -->
+              <div class="admin-jogo-form card-dark">
+                <h3>Novo Jogo / Editar Jogo</h3>
+                <input type="hidden" id="jogoEditId" value="" />
+                <div class="form-row">
+                  <div class="form-group">
+                    <label>Time da Casa</label>
+                    <input type="text" id="jogoHomeTeam" placeholder="Ex: Cruzeiro" />
+                  </div>
+                  <div class="form-group">
+                    <label>Time Visitante</label>
+                    <input type="text" id="jogoAwayTeam" placeholder="Ex: Flamengo" />
+                  </div>
+                </div>
+                <div class="form-row">
+                  <div class="form-group">
+                    <label>Data e Hora</label>
+                    <input type="datetime-local" id="jogoDate" />
+                  </div>
+                  <div class="form-group">
+                    <label>Competição</label>
+                    <select id="jogoComp" class="select-dark">
+                      <option value="71">🇧🇷 Série A</option>
+                      <option value="73">🇧🇷 Copa do Brasil</option>
+                      <option value="13">🌎 Libertadores</option>
+                      <option value="629">🇧🇷 Mineiro</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="form-row">
+                  <div class="form-group">
+                    <label>Placar Casa</label>
+                    <input type="number" id="jogoHomeScore" placeholder="—" min="0" />
+                  </div>
+                  <div class="form-group">
+                    <label>Placar Visitante</label>
+                    <input type="number" id="jogoAwayScore" placeholder="—" min="0" />
+                  </div>
+                  <div class="form-group">
+                    <label>Status</label>
+                    <select id="jogoStatus" class="select-dark">
+                      <option value="notstarted">Agendado</option>
+                      <option value="inprogress">Ao Vivo</option>
+                      <option value="finished">Encerrado</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="form-row">
+                  <button class="btn btn-primary" id="btnSalvarJogo">
+                    <i class="fas fa-save"></i> Salvar Jogo
+                  </button>
+                  <button class="btn btn-outline" id="btnLimparJogo">
+                    <i class="fas fa-times"></i> Limpar
+                  </button>
+                </div>
+              </div>
+
+              <!-- Escalação -->
+              <div class="admin-escalacao card-dark" id="adminEscalacaoWrap" style="display:none">
+                <h3>Escalação do Jogo: <span id="adminEscalacaoTitle"></span></h3>
+                <p class="info-text" style="padding:0;margin-bottom:1rem">Selecione os jogadores que participaram</p>
+                <div id="adminEscalacaoGrid" class="escalacao-grid"></div>
+                <div style="margin-top:1rem">
+                  <button class="btn btn-primary" id="btnSalvarEscalacao">
+                    <i class="fas fa-users"></i> Salvar Escalação
+                  </button>
+                </div>
+              </div>
+
+              <!-- Lista de jogos manuais -->
+              <div class="card-dark" style="margin-top:1.5rem">
+                <h3>Jogos Cadastrados Manualmente</h3>
+                <div id="adminJogosList" class="jogos-list" style="margin-top:1rem"></div>
+              </div>
+            </div>
+          </div>
         </div>
+        <div id="adminContent" class="admin-content" style="display:none"><!-- removido --></div>
       </div>
     </section>
 

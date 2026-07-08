@@ -500,6 +500,7 @@ Object.assign(APP, {
     if (tab === 'pendentes') this._loadPendentes();
     if (tab === 'usuarios')  this._loadUsuarios();
     if (tab === 'notas')     this._loadNotasAdmin();
+    if (tab === 'jogos')     this.loadAdminJogos();
   },
 
   _loadPendentes() {
@@ -654,4 +655,211 @@ document.addEventListener('DOMContentLoaded', () => {
       APP.loadJogos();
     }
   }, 60000);
+});
+
+// =============================================
+// ADMIN – CADASTRO DE JOGOS
+// =============================================
+
+Object.assign(APP, {
+
+  _currentAdminJogoId: null,
+
+  _showAdminTabOrig: APP._showAdminTab,
+
+  loadAdminJogos() {
+    this._setupJogoForm();
+    this._loadAdminJogosList();
+  },
+
+  _setupJogoForm() {
+    document.getElementById('btnSalvarJogo').onclick = () => this._salvarJogo();
+    document.getElementById('btnLimparJogo').onclick = () => this._limparJogoForm();
+    document.getElementById('btnSalvarEscalacao').onclick = () => this._salvarEscalacao();
+  },
+
+  _limparJogoForm() {
+    document.getElementById('jogoEditId').value = '';
+    document.getElementById('jogoHomeTeam').value = '';
+    document.getElementById('jogoAwayTeam').value = '';
+    document.getElementById('jogoDate').value = '';
+    document.getElementById('jogoHomeScore').value = '';
+    document.getElementById('jogoAwayScore').value = '';
+    document.getElementById('jogoStatus').value = 'notstarted';
+    document.getElementById('jogoComp').value = '71';
+    document.getElementById('adminEscalacaoWrap').style.display = 'none';
+    this._currentAdminJogoId = null;
+  },
+
+  _salvarJogo() {
+    const editId   = document.getElementById('jogoEditId').value;
+    const home     = document.getElementById('jogoHomeTeam').value.trim();
+    const away     = document.getElementById('jogoAwayTeam').value.trim();
+    const date     = document.getElementById('jogoDate').value;
+    const comp     = document.getElementById('jogoComp').value;
+    const hScore   = document.getElementById('jogoHomeScore').value;
+    const aScore   = document.getElementById('jogoAwayScore').value;
+    const status   = document.getElementById('jogoStatus').value;
+
+    if (!home || !away || !date) { showToast('Preencha times e data', 'error'); return; }
+
+    const id = editId || `manual_${Date.now()}`;
+    const ts = Math.floor(new Date(date).getTime() / 1000);
+    const leagueInfo = CONFIG.COMPETITIONS[comp] || {};
+
+    const jogo = {
+      id, home, away,
+      timestamp: ts,
+      leagueId: parseInt(comp),
+      leagueName: leagueInfo.name || '',
+      homeScore: hScore !== '' ? parseInt(hScore) : null,
+      awayScore: aScore !== '' ? parseInt(aScore) : null,
+      status,
+      manual: true,
+    };
+
+    // Salva no localStorage
+    const jogos = this._getManualJogos();
+    const idx = jogos.findIndex(j => j.id === id);
+    if (idx >= 0) jogos[idx] = jogo; else jogos.push(jogo);
+    localStorage.setItem('js_manualJogos', JSON.stringify(jogos));
+
+    // Salva no Sheets se configurado
+    if (isSheetsConfigured()) {
+      SHEETS.request('saveManualJogo', jogo);
+    }
+
+    showToast('Jogo salvo!', 'success');
+    document.getElementById('jogoEditId').value = id;
+    this._currentAdminJogoId = id;
+
+    // Mostra painel de escalação
+    this._mostrarEscalacao(id, home, away);
+    this._loadAdminJogosList();
+  },
+
+  _getManualJogos() {
+    try { return JSON.parse(localStorage.getItem('js_manualJogos') || '[]'); }
+    catch { return []; }
+  },
+
+  _mostrarEscalacao(jogoId, home, away) {
+    document.getElementById('adminEscalacaoWrap').style.display = 'block';
+    document.getElementById('adminEscalacaoTitle').textContent = `${home} × ${away}`;
+    this._currentAdminJogoId = jogoId;
+
+    // Carrega escalação salva
+    const escalacoes = this._getEscalacoes();
+    const saved = new Set(escalacoes[jogoId] || []);
+
+    const grid = document.getElementById('adminEscalacaoGrid');
+    if (!this.squad.length) {
+      grid.innerHTML = '<p class="info-text">Carregue o elenco primeiro (clique em Elenco no menu).</p>';
+      return;
+    }
+
+    grid.innerHTML = this.squad.map(p => {
+      const photo = p.photo || getPlayerPhoto(p.name) || '';
+      const sel   = saved.has(String(p.id));
+      return `<div class="escalacao-card ${sel ? 'selected' : ''}"
+        id="esc-${p.id}" onclick="APP._toggleEscalacao('${p.id}')">
+        ${photo
+          ? `<img src="${photo}" alt="${p.name}" onerror="this.style.display='none'" />`
+          : `<div style="width:48px;height:48px;border-radius:50%;background:var(--blue-mid);margin:0 auto 0.4rem;display:flex;align-items:center;justify-content:center"><i class="fas fa-user" style="color:var(--gray-400)"></i></div>`}
+        <div class="escalacao-card-name">${p.name}</div>
+        <div class="escalacao-card-pos">${translatePos(p.position)}</div>
+      </div>`;
+    }).join('');
+  },
+
+  _toggleEscalacao(playerId) {
+    const card = document.getElementById(`esc-${playerId}`);
+    card?.classList.toggle('selected');
+  },
+
+  _getEscalacoes() {
+    try { return JSON.parse(localStorage.getItem('js_escalacoes') || '{}'); }
+    catch { return {}; }
+  },
+
+  _salvarEscalacao() {
+    if (!this._currentAdminJogoId) return;
+    const selected = [...document.querySelectorAll('.escalacao-card.selected')]
+      .map(c => c.id.replace('esc-', ''));
+
+    const escalacoes = this._getEscalacoes();
+    escalacoes[this._currentAdminJogoId] = selected;
+    localStorage.setItem('js_escalacoes', JSON.stringify(escalacoes));
+
+    if (isSheetsConfigured()) {
+      SHEETS.request('saveEscalacao', { jogoId: this._currentAdminJogoId, playerIds: selected });
+    }
+
+    showToast(`Escalação salva: ${selected.length} jogadores`, 'success');
+  },
+
+  _loadAdminJogosList() {
+    const el    = document.getElementById('adminJogosList');
+    const jogos = this._getManualJogos();
+    if (!jogos.length) {
+      el.innerHTML = '<p class="info-text">Nenhum jogo cadastrado ainda.</p>';
+      return;
+    }
+
+    el.innerHTML = jogos.slice().reverse().map(j => {
+      const comp = CONFIG.COMPETITIONS[j.leagueId] || {};
+      const date = new Date(j.timestamp * 1000).toLocaleDateString('pt-BR', {
+        day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit'
+      });
+      const placar = j.homeScore !== null && j.awayScore !== null
+        ? `${j.homeScore} – ${j.awayScore}` : 'vs';
+      return `<div class="jogo-card">
+        <span class="jogo-comp-badge">${comp.flag || '⚽'} ${comp.short || j.leagueName}</span>
+        <div class="jogo-teams">
+          <div class="jogo-team"><div class="jogo-team-name">${j.home}</div></div>
+          <div class="jogo-placar">${placar}</div>
+          <div class="jogo-team"><div class="jogo-team-name">${j.away}</div></div>
+        </div>
+        <div class="jogo-date">${date}</div>
+        <div class="jogo-actions">
+          <button class="btn btn-sm btn-outline" onclick="APP._editarJogo('${j.id}')">
+            <i class="fas fa-edit"></i> Editar
+          </button>
+          <button class="btn btn-sm btn-danger" onclick="APP._deletarJogo('${j.id}')">
+            <i class="fas fa-trash"></i>
+          </button>
+        </div>
+      </div>`;
+    }).join('');
+  },
+
+  _editarJogo(id) {
+    const jogos = this._getManualJogos();
+    const j = jogos.find(x => x.id === id);
+    if (!j) return;
+
+    document.getElementById('jogoEditId').value = j.id;
+    document.getElementById('jogoHomeTeam').value = j.home;
+    document.getElementById('jogoAwayTeam').value = j.away;
+    document.getElementById('jogoComp').value = j.leagueId;
+    document.getElementById('jogoStatus').value = j.status;
+    document.getElementById('jogoHomeScore').value = j.homeScore ?? '';
+    document.getElementById('jogoAwayScore').value = j.awayScore ?? '';
+
+    // Converte timestamp para datetime-local
+    const d = new Date(j.timestamp * 1000);
+    const local = new Date(d - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+    document.getElementById('jogoDate').value = local;
+
+    this._mostrarEscalacao(id, j.home, j.away);
+    document.getElementById('admin-jogos').scrollIntoView({ behavior: 'smooth' });
+  },
+
+  _deletarJogo(id) {
+    if (!confirm('Deletar este jogo?')) return;
+    const jogos = this._getManualJogos().filter(j => j.id !== id);
+    localStorage.setItem('js_manualJogos', JSON.stringify(jogos));
+    showToast('Jogo removido.');
+    this._loadAdminJogosList();
+  },
 });
