@@ -207,13 +207,34 @@ function getSofaSquad() {
   return refreshSofaSquad();
 }
 
-function refreshSofaSquad() {
+function debugSquad() {
   try {
+    Logger.log('Iniciando fetch SofaScore...');
     const res = UrlFetchApp.fetch('https://api.sofascore.com/api/v1/team/1954/players', {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
         'Accept': 'application/json',
         'Referer': 'https://www.sofascore.com/',
+      },
+      muteHttpExceptions: true,
+    });
+    Logger.log('HTTP Code: ' + res.getResponseCode());
+    const text = res.getContentText();
+    Logger.log('Resposta (primeiros 500): ' + text.substring(0, 500));
+    const data = JSON.parse(text);
+    Logger.log('Jogadores encontrados: ' + (data.players ? data.players.length : 0));
+  } catch(e) {
+    Logger.log('ERRO: ' + e.message);
+  }
+}
+
+function refreshSofaSquad() {
+  try {
+    // API-Football não bloqueia requests do Google Apps Script
+    const res = UrlFetchApp.fetch(
+      'https://v3.football.api-sports.io/players/squads?team=135', {
+      headers: {
+        'x-apisports-key': '477d6449d7eb1e2a6722e67624eb4b99',
       },
       muteHttpExceptions: true,
     });
@@ -223,16 +244,15 @@ function refreshSofaSquad() {
     }
 
     const data = JSON.parse(res.getContentText());
-    if (!data.players) return { ok: false, error: 'Sem jogadores' };
+    if (!data.response || !data.response[0]) return { ok: false, error: 'Sem dados' };
 
-    const posMap = { G: 'Goalkeeper', D: 'Defender', M: 'Midfielder', F: 'Attacker' };
-    const players = data.players.map(p => ({
-      id:          p.player.id,
-      name:        p.player.name,
-      position:    posMap[p.player.position] || p.player.position || '',
-      number:      p.player.jerseyNumber || '',
-      photo:       `https://api.sofascore.com/api/v1/player/${p.player.id}/image`,
-      nationality: p.player.country?.name || '',
+    const players = data.response[0].players.map(p => ({
+      id:          p.id,
+      name:        p.name,
+      position:    p.position || '',
+      number:      p.number || '',
+      photo:       p.photo || `https://media.api-sports.io/football/players/${p.id}.png`,
+      nationality: p.nationality || '',
     }));
 
     // Salva na planilha

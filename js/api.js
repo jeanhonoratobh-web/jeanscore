@@ -29,7 +29,7 @@ const API = {
   },
 
   async getSquad() {
-    // Elenco via Apps Script (proxy para SofaScore — evita CORS)
+    // Elenco via Apps Script proxy (tenta SofaScore, fallback API-Football)
     if (isSheetsConfigured()) {
       try {
         const res = await fetch(CONFIG.SHEETS_API_URL, {
@@ -40,14 +40,17 @@ const API = {
         const data = await res.json();
         if (data.ok && data.players?.length) return data.players;
       } catch(e) {
-        console.warn('Proxy squad falhou, tentando API-Football:', e);
+        console.warn('Proxy squad falhou:', e);
       }
     }
-
-    // Fallback: API-Football
+    // Fallback direto: API-Football (funciona no browser)
     const data = await this._footballRequest('/players/squads', { team: CONFIG.CRUZEIRO_ID });
     if (!data?.response?.length) return [];
-    return data.response[0].players || [];
+    // Mapeia para o mesmo formato e usa foto do SofaScore pelo nome
+    return data.response[0].players.map(p => ({
+      ...p,
+      photo: `https://media.api-sports.io/football/players/${p.id}.png`,
+    })) || [];
   },
 
   // ─────────────────────────────────────────
