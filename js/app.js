@@ -503,10 +503,24 @@ Object.assign(APP, {
     if (tab === 'jogos')     this.loadAdminJogos();
   },
 
-  _loadPendentes() {
-    const users   = SHEETS.local.getUsers();
-    const pending = users.filter(u => u.status === 'pending');
-    const el      = document.getElementById('pendentesList');
+  async _loadPendentes() {
+    const el = document.getElementById('pendentesList');
+    el.innerHTML = '<div class="loading-spinner"><i class="fas fa-futbol fa-spin"></i></div>';
+
+    let pending = [];
+    if (isSheetsConfigured()) {
+      const res = await SHEETS.getUsers();
+      if (res?.ok && res.users) {
+        pending = res.users.filter(u => u.status === 'pending');
+        // Sincroniza com localStorage
+        const local = SHEETS.local.getUsers();
+        res.users.forEach(u => { if (!local.find(l => l.username === u.username)) local.push(u); });
+        SHEETS.local.saveUsers(local);
+      }
+    } else {
+      pending = SHEETS.local.getUsers().filter(u => u.status === 'pending');
+    }
+
     if (!pending.length) { el.innerHTML = '<p class="info-text">Nenhum cadastro pendente.</p>'; return; }
     el.innerHTML = pending.map(u => `
       <div class="pending-item" id="pend-${u.username}">
@@ -542,9 +556,18 @@ Object.assign(APP, {
     this._loadPendentes();
   },
 
-  _loadUsuarios() {
-    const users = SHEETS.local.getUsers().filter(u => u.status === 'approved');
-    const el    = document.getElementById('usuariosList');
+  async _loadUsuarios() {
+    const el = document.getElementById('usuariosList');
+    el.innerHTML = '<div class="loading-spinner"><i class="fas fa-futbol fa-spin"></i></div>';
+
+    let users = [];
+    if (isSheetsConfigured()) {
+      const res = await SHEETS.getUsers();
+      if (res?.ok && res.users) users = res.users.filter(u => u.status === 'approved');
+    } else {
+      users = SHEETS.local.getUsers().filter(u => u.status === 'approved');
+    }
+
     if (!users.length) { el.innerHTML = '<p class="info-text">Nenhum usuário ativo.</p>'; return; }
     el.innerHTML = users.map(u => `
       <div class="user-item">
