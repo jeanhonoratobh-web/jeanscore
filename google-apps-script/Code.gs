@@ -32,6 +32,8 @@ function doPost(e) {
       submitGameScore: () => submitGameScore(payload),
       getUserGameScores: () => getUserGameScores(payload),
       updateUserHash:  () => updateUserHash(payload),
+      getSquad:        () => getSofaSquad(),
+      refreshSquad:    () => refreshSofaSquad(),
     };
 
     if (!handlers[action]) return jsonResponse({ ok: false, error: 'Ação inválida' });
@@ -183,8 +185,80 @@ function updateUserHash({ username, passHash }) {
 }
 
 // =============================================
-// NOTAS PRINCIPAIS
+// ELENCO (via proxy Apps Script → SofaScore)
 // =============================================
+
+function getSofaSquad() {
+  const sheet = getSheet('Elenco');
+  const data  = sheet.getDataRange().getValues();
+
+  // Retorna cache da planilha se tiver dados frescos (menos de 24h)
+  if (data.length > 1) {
+    const lastUpdate = data[1][6]; // coluna updatedAt
+    if (lastUpdate && (new Date() - new Date(lastUpdate)) < 24 * 60 * 60 * 1000) {
+      const [headers, ...rows] = data;
+      return { ok: true, players: rows.map(r => ({
+        id: r[0], name: r[1], position: r[2], number: r[3], photo: r[4], nationality: r[5]
+      }))};
+    }
+  }
+
+  // Busca no SofaScore
+  return refreshSofaSquad();
+}
+
+function refreshSofaSquad() {
+  try {
+    const res = UrlFetchApp.fetch('https://api.sofascore.com/api/v1/team/1954/players', {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Accept': 'application/json',
+        'Referer': 'https://www.sofascore.com/',
+      },
+      muteHttpExceptions: true,
+    });
+
+    if (res.getResponseCode() !== 200) {
+      return { ok: false, error: `HTTP ${res.getResponseCode()}` };
+    }
+
+    const data = JSON.parse(res.getContentText());
+    if (!data.players) return { ok: false, error: 'Sem jogadores' };
+
+    const posMap = { G: 'Goalkeeper', D: 'Defender', M: 'Midfielder', F: 'Attacker' };
+    const players = data.players.map(p => ({
+      id:          p.player.id,
+      name:        p.player.name,
+      position:    posMap[p.player.position] || p.player.position || '',
+      number:      p.player.jerseyNumber || '',
+      photo:       `https://api.sofascore.com/api/v1/player/${p.player.id}/image`,
+      nationality: p.player.country?.name || '',
+    }));
+
+    // Salva na planilha
+    const sheet = getSheet('Elenco');
+    sheet.clearContents();
+    sheet.appendRow(['id','name','position','number','photo','nationality','updatedAt']);
+    const now = new Date().toISOString();
+    players.forEach(p => sheet.appendRow([p.id, p.name, p.position, p.number, p.photo, p.nationality, now]));
+
+    return { ok: true, players };
+  } catch(e) {
+    return { ok: false, error: e.message };
+  }
+}
+
+// Trigger diário — configure em: Gatilhos > Adicionar gatilho > refreshSofaSquad > Diário
+function setupDailyTrigger() {
+  // Remove triggers existentes do refreshSofaSquad
+  ScriptApp.getProjectTriggers()
+    .filter(t => t.getHandlerFunction() === 'refreshSofaSquad')
+    .forEach(t => ScriptApp.deleteTrigger(t));
+  // Cria novo trigger diário às 6h
+  ScriptApp.newTrigger('refreshSofaSquad')
+    .timeBased().everyDays(1).atHour(6).create();
+  Logger.log('Trigger diário configurado!');
+}
 
 function getMainScores() {
   const sheet = getSheet(SHEETS_NAMES.MAIN_SCORES);

@@ -29,32 +29,25 @@ const API = {
   },
 
   async getSquad() {
-    // Tenta SofaScore primeiro (fotos melhores, dados mais atuais)
-    const sofaSquad = await this._getSofaSquad();
-    if (sofaSquad.length) return sofaSquad;
+    // Elenco via Apps Script (proxy para SofaScore — evita CORS)
+    if (isSheetsConfigured()) {
+      try {
+        const res = await fetch(CONFIG.SHEETS_API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain' },
+          body: JSON.stringify({ action: 'getSquad' }),
+        });
+        const data = await res.json();
+        if (data.ok && data.players?.length) return data.players;
+      } catch(e) {
+        console.warn('Proxy squad falhou, tentando API-Football:', e);
+      }
+    }
 
     // Fallback: API-Football
-    const data = await this._footballRequest('/players/squads', {
-      team: CONFIG.CRUZEIRO_ID
-    });
+    const data = await this._footballRequest('/players/squads', { team: CONFIG.CRUZEIRO_ID });
     if (!data?.response?.length) return [];
     return data.response[0].players || [];
-  },
-
-  async _getSofaSquad() {
-    const data = await this._sofaRequest(`/team/${CONFIG.CRUZEIRO_SOFA_ID}/players`);
-    if (!data?.players?.length) return [];
-
-    const posMap = { G: 'Goalkeeper', D: 'Defender', M: 'Midfielder', F: 'Attacker' };
-
-    return data.players.map(p => ({
-      id:       p.player.id,
-      name:     p.player.name,
-      position: posMap[p.player.position] || p.player.position || '',
-      number:   p.player.jerseyNumber || '',
-      photo:    `https://api.sofascore.com/api/v1/player/${p.player.id}/image`,
-      _source:  'sofascore',
-    }));
   },
 
   // ─────────────────────────────────────────
