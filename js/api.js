@@ -292,6 +292,8 @@ const API = {
   },
 
   isMonitoredComp(fixture) {
+    // Jogos manuais sempre são monitorados
+    if (fixture._manual) return true;
     // ESPN já popula _leagueId diretamente
     if (fixture._leagueId) return true;
     // Fallback: tenta pelo nome
