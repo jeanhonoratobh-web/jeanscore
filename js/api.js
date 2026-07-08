@@ -192,7 +192,7 @@ const API = {
     return all.sort((a, b) => a.startTimestamp - b.startTimestamp);
   },
 
-  _espnStatusToSofa
+  _espnStatusToSofa(espnStatus, eventDate, homeScore, awayScore) {
     // Se tem status explícito, usa ele
     if (espnStatus) {
       const s = espnStatus.toLowerCase();
