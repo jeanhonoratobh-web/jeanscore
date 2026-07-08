@@ -26,9 +26,8 @@ function getPlayerPhoto(name) {
 }
 
 function playerImgHTML(name, apiPhoto, cssClass = '') {
-  // Prioridade: foto da API (SofaScore), depois local, depois placeholder
-  const local = getPlayerPhoto(name);
-  const src   = apiPhoto || local || '';
+  // Usa foto da API (API-Football) — fotos SofaScore bloqueadas por CORB no browser
+  const src = apiPhoto || getPlayerPhoto(name) || '';
   if (src) return `<img src="${src}" alt="${name}" class="${cssClass}"
     onerror="this.style.display='none';this.nextElementSibling.style.display='flex'" />
     <span class="player-img-placeholder" style="display:none"><i class="fas fa-user"></i></span>`;
@@ -262,11 +261,12 @@ Object.assign(APP, {
     }
 
     content.innerHTML = playersToShow.map(p => {
-      const saved  = savedScores[p.id] ?? null;
-      // Usa foto do SofaScore se disponível, senão local
-      const sofaPhoto = `https://api.sofascore.com/api/v1/player/${p.id}/image`;
-      const imgTag = `<img src="${sofaPhoto}" alt="${p.name}" class="avaliar-player-img"
-        onerror="this.src='${getPlayerPhoto(p.name) || ''}';this.onerror=null;" />`;
+      const saved   = savedScores[p.id] ?? null;
+      const photo   = getPlayerPhoto(p.name) || p.photo || '';
+      const imgTag  = photo
+        ? `<img src="${photo}" alt="${p.name}" class="avaliar-player-img" onerror="this.style.opacity=0" />`
+        : `<div class="avaliar-player-img" style="background:var(--blue-mid);border-radius:50%;display:flex;align-items:center;justify-content:center">
+             <i class="fas fa-user" style="font-size:1.5rem;color:var(--gray-400)"></i></div>`;
       return `<div class="avaliar-player-card ${saved !== null ? 'rated' : ''}" id="apc-${p.id}">
         ${imgTag}
         <div class="avaliar-player-name">${p.name}</div>
@@ -415,13 +415,13 @@ Object.assign(APP, {
     if (!ranked.length) { el.innerHTML = '<p class="info-text" style="padding:1rem">Nenhuma nota ainda.</p>'; return; }
 
     el.innerHTML = ranked.map((p, i) => {
-      const cls      = ['gold','silver','bronze'][i] || '';
-      const sofaImg  = `https://api.sofascore.com/api/v1/player/${p.id}/image`;
-      const localImg = getPlayerPhoto(p.name) || '';
+      const cls   = ['gold','silver','bronze'][i] || '';
+      const photo = getPlayerPhoto(p.name) || '';
       return `<div class="ranking-item">
         <span class="ranking-pos ${cls}">${i + 1}º</span>
-        <img class="ranking-avatar" src="${sofaImg}" alt="${p.name}"
-          onerror="this.src='${localImg}';this.onerror=null;" />
+        ${photo
+          ? `<img class="ranking-avatar" src="${photo}" alt="${p.name}" onerror="this.style.display='none'" />`
+          : `<div class="ranking-avatar" style="background:var(--blue-mid);display:flex;align-items:center;justify-content:center"><i class="fas fa-user" style="color:var(--gray-400)"></i></div>`}
         <span class="ranking-name">${p.name}</span>
         <span class="ranking-score" style="${scoreColor(p.avg)};padding:0.15rem 0.5rem;border-radius:4px">${p.avg}</span>
       </div>`;
@@ -450,13 +450,13 @@ Object.assign(APP, {
     if (!top.length) { el.innerHTML = '<p class="info-text" style="padding:1rem">Nenhuma nota de jogo ainda.</p>'; return; }
 
     el.innerHTML = top.map((p, i) => {
-      const cls      = ['gold','silver','bronze'][i] || '';
-      const sofaImg  = `https://api.sofascore.com/api/v1/player/${p.id}/image`;
-      const localImg = getPlayerPhoto(p.name) || '';
+      const cls   = ['gold','silver','bronze'][i] || '';
+      const photo = getPlayerPhoto(p.name) || '';
       return `<div class="ranking-item">
         <span class="ranking-pos ${cls}">${i + 1}º</span>
-        <img class="ranking-avatar" src="${sofaImg}" alt="${p.name}"
-          onerror="this.src='${localImg}';this.onerror=null;" />
+        ${photo
+          ? `<img class="ranking-avatar" src="${photo}" alt="${p.name}" onerror="this.style.display='none'" />`
+          : `<div class="ranking-avatar" style="background:var(--blue-mid);display:flex;align-items:center;justify-content:center"><i class="fas fa-user" style="color:var(--gray-400)"></i></div>`}
         <div style="flex:1">
           <div class="ranking-name">${p.name}</div>
           <div style="font-size:0.72rem;color:var(--gray-400)">${p.match}</div>
