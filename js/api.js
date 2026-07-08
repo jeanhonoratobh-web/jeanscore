@@ -143,14 +143,25 @@ const API = {
         const homeTeam = isHome ? cruzeiro : opponent;
         const awayTeam = isHome ? opponent : cruzeiro;
 
+        const startTs = Math.floor(new Date(ev.date).getTime() / 1000);
+        // Placar pode vir como objeto {value, displayValue} ou string direto
+        const extractScore = (competitor) => {
+          const s = competitor?.score;
+          if (s === null || s === undefined) return null;
+          if (typeof s === 'object') return s.displayValue ?? s.value ?? null;
+          return s;
+        };
+        const hScore = extractScore(homeTeam);
+        const aScore = extractScore(awayTeam);
+
         all.push({
           id:         ev.id,
           homeTeam:   { name: homeTeam?.team?.displayName || '?', id: homeTeam?.team?.id, logo: homeTeam?.team?.logo },
           awayTeam:   { name: awayTeam?.team?.displayName || '?', id: awayTeam?.team?.id, logo: awayTeam?.team?.logo },
-          homeScore:  { current: homeTeam?.score ?? null },
-          awayScore:  { current: awayTeam?.score ?? null },
-          status:     { type: this._espnStatusToSofa(ev.status?.type?.name) },
-          startTimestamp: Math.floor(new Date(ev.date).getTime() / 1000),
+          homeScore:  { current: hScore },
+          awayScore:  { current: aScore },
+          status:     { type: this._espnStatusToSofa(ev.status?.type?.name, startTs, hScore, aScore) },
+          startTimestamp: startTs,
           tournament: { name: leagueInfo.name || league, id: leagueInfo.id },
           _leagueId:  leagueInfo.id,
         });
@@ -160,12 +171,22 @@ const API = {
     return all.sort((a, b) => a.startTimestamp - b.startTimestamp);
   },
 
-  _espnStatusToSofa(espnStatus) {
-    if (!espnStatus) return 'notstarted';
-    const s = espnStatus.toLowerCase();
-    if (s.includes('final') || s.includes('ft') || s.includes('full')) return 'finished';
-    if (s.includes('progress') || s.includes('live') || s.includes('half')) return 'inprogress';
-    if (s.includes('postponed')) return 'postponed';
+  _espnStatusToSofa(espnStatus, eventDate, homeScore, awayScore) {
+    // Se tem status explícito, usa ele
+    if (espnStatus) {
+      const s = espnStatus.toLowerCase();
+      if (s.includes('final') || s.includes('ft') || s.includes('full') || s.includes('end')) return 'finished';
+      if (s.includes('progress') || s.includes('live') || s.includes('half')) return 'inprogress';
+      if (s.includes('postponed')) return 'postponed';
+    }
+    // Sem status: usa data e placar para inferir
+    const now = Date.now() / 1000;
+    const gameTime = eventDate || 0;
+    // Tem placar → encerrado
+    if (homeScore !== null && homeScore !== '' && awayScore !== null && awayScore !== '') return 'finished';
+    // Data no passado (mais de 2h) → encerrado
+    if (gameTime > 0 && gameTime < now - 7200) return 'finished';
+    // Data no futuro
     return 'notstarted';
   },
 
