@@ -187,19 +187,112 @@ Object.assign(APP, {
     const list = document.getElementById('jogosList');
     list.innerHTML = '<div class="loading-spinner"><i class="fas fa-futbol fa-spin"></i> Carregando jogos...</div>';
 
-    // Busca ao vivo primeiro
-    const [live, all] = await Promise.all([
-      API.getLiveFixtures(),
-      API.getAllFixtures()
-    ]);
-
-    const liveIds = new Set(live.map(f => f.fixture.id));
-
-    // Mescla: marca ao vivo
-    all.forEach(f => { if (liveIds.has(f.fixture.id)) f._live = true; });
+    const all = await API.getAllFixtures();
     this.allFixtures = all;
 
     this._renderJogos('proximos', 'all');
+
+    // Tabs
+    document.querySelectorAll('.jogos-tabs .tab-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.jogos-tabs .tab-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        const activeComp = document.querySelector('.filters .filter-btn[data-comp].active')?.dataset.comp || 'all';
+        this._renderJogos(btn.dataset.tab, activeComp);
+      });
+    });
+
+    // Filtros de competição
+    document.querySelectorAll('.filters .filter-btn[data-comp]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.filters .filter-btn[data-comp]').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        const activeTab = document.querySelector('.jogos-tabs .tab-btn.active')?.dataset.tab || 'proximos';
+        this._renderJogos(activeTab, btn.dataset.comp);
+      });
+    });
+  },
+
+  _renderJogos(tab, compFilter) {
+    const list = document.getElementById('jogosList');
+
+    let fixtures = this.allFixtures;
+
+    // Filtra por competição monitorada
+    fixtures = fixtures.filter(f => API.isMonitoredComp(f));
+
+    // Filtra por competição específica
+    if (compFilter !== 'all') {
+      fixtures = fixtures.filter(f => {
+        const id = API.getTournamentId(f.tournament?.name || '');
+        return String(id) === String(compFilter);
+      });
+    }
+
+    // Separa passados/futuros
+    let filtered;
+    if (tab === 'proximos') {
+      filtered = fixtures.filter(f => {
+        const st = API.formatStatus(f);
+        return !st.done || st.live;
+      }).sort((a, b) => a.startTimestamp - b.startTimestamp);
+    } else {
+      filtered = fixtures.filter(f => {
+        const st = API.formatStatus(f);
+        return st.done && !st.live;
+      }).sort((a, b) => b.startTimestamp - a.startTimestamp);
+    }
+
+    if (!filtered.length) {
+      list.innerHTML = '<div class="empty-state"><i class="fas fa-calendar-times"></i>Nenhum jogo encontrado.</div>';
+      return;
+    }
+
+    list.innerHTML = filtered.map(f => {
+      const status = API.formatStatus(f);
+      const score  = API.getScore(f);
+      const scoreStr = status.done || status.live
+        ? `${score.home} – ${score.away}` : `vs`;
+
+      const gs = SHEETS.local.getGameScores();
+      const hasScores = gs[f.id] && Object.keys(gs[f.id]).length > 0;
+
+      const homeLogo = f.homeTeam?.id
+        ? `https://api.sofascore.com/api/v1/team/${f.homeTeam.id}/image`
+        : '';
+      const awayLogo = f.awayTeam?.id
+        ? `https://api.sofascore.com/api/v1/team/${f.awayTeam.id}/image`
+        : '';
+
+      return `
+      <div class="jogo-card" data-fixture="${f.id}">
+        <span class="jogo-comp-badge">${API.compFlag(f)} ${API.compName(f)}</span>
+        <div class="jogo-teams">
+          <div class="jogo-team">
+            <img class="jogo-team-logo" src="${homeLogo}" alt="${f.homeTeam?.name}"
+              onerror="this.style.display='none'" />
+            <div class="jogo-team-name">${f.homeTeam?.name || '—'}</div>
+          </div>
+          <div class="jogo-placar ${status.live ? 'live' : ''}">${scoreStr}</div>
+          <div class="jogo-team">
+            <img class="jogo-team-logo" src="${awayLogo}" alt="${f.awayTeam?.name}"
+              onerror="this.style.display='none'" />
+            <div class="jogo-team-name">${f.awayTeam?.name || '—'}</div>
+          </div>
+        </div>
+        <div class="jogo-date">${API.formatDate(f.startTimestamp)}</div>
+        <span class="jogo-status-badge ${status.css}">${status.live ? '🔴 AO VIVO' : status.label}</span>
+        <div class="jogo-actions">
+          ${status.done && AUTH.isLoggedIn()
+            ? `<button class="btn btn-sm btn-primary" onclick="APP.openRatingModal(${f.id})">
+                ${hasScores ? '✏️ Reeditar' : '⭐ Avaliar'}
+               </button>`
+            : ''}
+        </div>
+      </div>`;
+    }).join('');
+  },
+});    this._renderJogos('proximos', 'all');
 
     // Tabs
     document.querySelectorAll('.jogos-tabs .tab-btn').forEach(btn => {
@@ -299,22 +392,23 @@ Object.assign(APP, {
   async openRatingModal(fixtureId) {
     if (!AUTH.isLoggedIn()) { showToast('Você precisa estar logado para avaliar.', 'error'); return; }
 
-    const fixture = this.allFixtures.find(f => f.fixture.id === fixtureId);
+    const fixture = this.allFixtures.find(f => f.id === fixtureId);
     if (!fixture) return;
 
-    const modal = document.getElementById('modalAvaliarJogo');
-    const title = document.getElementById('modalAvaliarTitle');
+    const modal   = document.getElementById('modalAvaliarJogo');
+    const title   = document.getElementById('modalAvaliarTitle');
     const content = document.getElementById('modalAvaliarContent');
 
-    const home = fixture.teams.home.name;
-    const away = fixture.teams.away.name;
-    title.textContent = `${home} ${fixture.goals.home} × ${fixture.goals.away} ${away}`;
+    const score = API.getScore(fixture);
+    title.textContent = `${fixture.homeTeam?.name} ${score.home} × ${score.away} ${fixture.awayTeam?.name}`;
 
     content.innerHTML = '<div class="loading-spinner"><i class="fas fa-futbol fa-spin"></i></div>';
     modal.classList.add('open');
 
-    // Busca escalação
-    const { participated, all } = await API.getParticipants(fixtureId);
+    // Busca escalação via SofaScore
+    const lineupData = await API.getLineup(fixtureId);
+    const participated = lineupData?.participated || [];
+    const all          = lineupData?.all || [];
 
     // Notas já dadas por esse usuário
     const username = AUTH.getUsername();
@@ -355,7 +449,7 @@ Object.assign(APP, {
         <div class="star-rating" data-player="${p.id}">
           ${[1,2,3,4,5,6,7,8,9,10].map(n =>
             `<button class="star-btn ${saved !== null && n <= saved ? 'active' : ''}"
-               data-val="${n}" onclick="APP.setRating(${p.id}, ${n})">${n <= 5 ? '★' : '★'}</button>`
+               data-val="${n}" onclick="APP.setRating(${p.id}, ${n})">★</button>`
           ).join('')}
         </div>
         <input type="number" class="note-input" id="note-${p.id}"
@@ -386,9 +480,11 @@ Object.assign(APP, {
   async saveGameRatings() {
     if (!this.currentFixtureForRating) return;
     const { fixtureId, fixture, participated } = this.currentFixtureForRating;
-    const username  = AUTH.getUsername();
-    const home = fixture.teams.home.name;
-    const away = fixture.teams.away.name;
+    const username = AUTH.getUsername();
+    const score    = API.getScore(fixture);
+    const home = fixture.homeTeam?.name || '';
+    const away = fixture.awayTeam?.name || '';
+    const date = API.formatDate(fixture.startTimestamp);
 
     const playersToScore = participated.length > 0 ? participated : this.squad.map(p => ({
       id: p.id, name: p.name, played: true
@@ -557,7 +653,10 @@ Object.assign(APP, {
       this.allFixtures = await API.getAllFixtures();
     }
 
-    const past = this.allFixtures.filter(f => API.formatStatus(f).done);
+    const past = this.allFixtures.filter(f =>
+      API.formatStatus(f).done && API.isMonitoredComp(f)
+    );
+
     if (!past.length) {
       content.innerHTML = '<p class="info-text">Nenhum jogo finalizado ainda.</p>';
       return;
@@ -565,28 +664,30 @@ Object.assign(APP, {
 
     content.innerHTML = past.slice().reverse().map(f => {
       const gs = SHEETS.local.getGameScores();
-      const myScores = gs[f.fixture.id];
+      const myScores = gs[f.id];
       const username = AUTH.getUsername();
       const alreadyRated = myScores && Object.values(myScores).some(s => s[username] !== undefined);
-      const leagueId = f.league.id;
+      const score = API.getScore(f);
+      const homeLogo = `https://api.sofascore.com/api/v1/team/${f.homeTeam?.id}/image`;
+      const awayLogo = `https://api.sofascore.com/api/v1/team/${f.awayTeam?.id}/image`;
 
       return `
       <div class="jogo-card">
-        <span class="jogo-comp-badge">${CONFIG.COMPETITIONS[leagueId]?.flag || ''} ${API.compName(leagueId)}</span>
+        <span class="jogo-comp-badge">${API.compFlag(f)} ${API.compName(f)}</span>
         <div class="jogo-teams">
           <div class="jogo-team">
-            <img class="jogo-team-logo" src="${f.teams.home.logo}" alt="${f.teams.home.name}" onerror="this.style.display='none'" />
-            <div class="jogo-team-name">${f.teams.home.name}</div>
+            <img class="jogo-team-logo" src="${homeLogo}" alt="${f.homeTeam?.name}" onerror="this.style.display='none'" />
+            <div class="jogo-team-name">${f.homeTeam?.name || '—'}</div>
           </div>
-          <div class="jogo-placar">${f.goals.home ?? 0} – ${f.goals.away ?? 0}</div>
+          <div class="jogo-placar">${score.home} – ${score.away}</div>
           <div class="jogo-team">
-            <img class="jogo-team-logo" src="${f.teams.away.logo}" alt="${f.teams.away.name}" onerror="this.style.display='none'" />
-            <div class="jogo-team-name">${f.teams.away.name}</div>
+            <img class="jogo-team-logo" src="${awayLogo}" alt="${f.awayTeam?.name}" onerror="this.style.display='none'" />
+            <div class="jogo-team-name">${f.awayTeam?.name || '—'}</div>
           </div>
         </div>
-        <div class="jogo-date">${API.formatDate(f.fixture.date)}</div>
+        <div class="jogo-date">${API.formatDate(f.startTimestamp)}</div>
         <div class="jogo-actions">
-          <button class="btn btn-sm btn-primary" onclick="APP.openRatingModal(${f.fixture.id})">
+          <button class="btn btn-sm btn-primary" onclick="APP.openRatingModal(${f.id})">
             ${alreadyRated ? '✏️ Editar notas' : '⭐ Dar notas'}
           </button>
         </div>
@@ -827,8 +928,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // ── Atualiza ao vivo a cada 60s ──
   setInterval(async () => {
-    const live = await API.getLiveFixtures();
+    const live = this.allFixtures.filter(f => API.formatStatus(f).live);
     if (live.length > 0 && APP.currentPage === 'jogos') {
+      // Limpa cache dos jogos ao vivo para forçar atualização
+      live.forEach(f => {
+        delete CACHE[`${API.SOFA_BASE}/team/${CONFIG.CRUZEIRO_SOFA_ID}/events/last/0`];
+      });
       APP.loadJogos();
     }
   }, 60000);
