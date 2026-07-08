@@ -91,65 +91,40 @@ const API = {
     return data?.events || [];
   },
 
-  // Todos os jogos (últimos 2 pages + próximos 1 page)
+  // Todos os jogos via Apps Script proxy
   async getAllFixtures() {
-    const [last0, last1, next0] = await Promise.all([
-      this.getLastFixtures(0),
-      this.getLastFixtures(1),
-      this.getNextFixtures(0),
-    ]);
-    const all = [...last1, ...last0, ...next0];
-    // Remove duplicatas por ID
-    const seen = new Set();
-    return all.filter(f => {
-      if (seen.has(f.id)) return false;
-      seen.add(f.id);
-      return true;
-    });
+    if (isSheetsConfigured()) {
+      try {
+        const res = await fetch(CONFIG.SHEETS_API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain' },
+          body: JSON.stringify({ action: 'getFixtures' }),
+        });
+        const data = await res.json();
+        if (data.ok && data.fixtures?.length) return data.fixtures;
+      } catch(e) {
+        console.warn('Proxy fixtures falhou:', e);
+      }
+    }
+    return [];
   },
 
-  // Escalação de um jogo específico
-  async getLineup(sofaEventId) {
-    const data = await this._sofaRequest(`/event/${sofaEventId}/lineups`);
-    if (!data?.home && !data?.away) return null;
-
-    // Descobre qual time é o Cruzeiro
-    const cruzTeam = data.home?.team?.name?.toLowerCase().includes('cruzeiro')
-      ? data.home : data.away;
-    if (!cruzTeam) return null;
-
-    const participated = [];
-    const all = [];
-
-    cruzTeam.players?.forEach(p => {
-      const player = {
-        id:      p.player.id,
-        name:    p.player.name,
-        pos:     p.player.position || '',
-        number:  p.jerseyNumber || '',
-        played:  !p.substitute,   // titulares jogaram
-        starter: !p.substitute,
-      };
-      all.push(player);
-      if (!p.substitute) participated.push(player);
-    });
-
-    // Substitutos que entraram: verificar via statistics ou marcar todos como potencialmente jogados
-    cruzTeam.players?.forEach(p => {
-      if (p.substitute) {
-        const player = all.find(a => a.id === p.player.id);
-        if (player) {
-          // Se tem estatísticas de minutos jogados, entrou
-          const mins = p.statistics?.minutesPlayed;
-          if (mins && mins > 0) {
-            player.played = true;
-            participated.push(player);
-          }
-        }
+  // Escalação via Apps Script proxy
+  async getLineup(fixtureId) {
+    if (isSheetsConfigured()) {
+      try {
+        const res = await fetch(CONFIG.SHEETS_API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain' },
+          body: JSON.stringify({ action: 'getLineup', fixtureId }),
+        });
+        const data = await res.json();
+        if (data.ok) return { participated: data.participated || [], all: data.all || [] };
+      } catch(e) {
+        console.warn('Proxy lineup falhou:', e);
       }
-    });
-
-    return { participated, all };
+    }
+    return { participated: [], all: [] };
   },
 
   // Converte torneio SofaScore → ID local

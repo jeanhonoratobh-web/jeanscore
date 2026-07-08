@@ -34,6 +34,10 @@ function doPost(e) {
       updateUserHash:  () => updateUserHash(payload),
       getSquad:        () => getSofaSquad(),
       refreshSquad:    () => refreshSofaSquad(),
+      addPlayer:       () => addPlayerToSquad(payload),
+      getFixtures:     () => getFixtures(),
+      refreshFixtures: () => refreshFixtures(),
+      getLineup:       () => getLineup(payload),
     };
 
     if (!handlers[action]) return jsonResponse({ ok: false, error: 'Ação inválida' });
@@ -384,4 +388,154 @@ function getUserGameScores({ fixtureId, username }) {
     .forEach(r => { myScores[r[4]] = parseFloat(r[7]); });
 
   return { ok: true, scores: myScores };
+}
+
+// =============================================
+// JOGOS E ESCALAÇÕES (proxy SofaScore)
+// =============================================
+
+const SOFA_HEADERS_GAS = {
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+  'Accept': 'application/json',
+  'Referer': 'https://www.sofascore.com/',
+};
+
+function sofaFetch(path) {
+  try {
+    const res = UrlFetchApp.fetch('https://api.sofascore.com/api/v1' + path, {
+      headers: SOFA_HEADERS_GAS,
+      muteHttpExceptions: true,
+    });
+    if (res.getResponseCode() !== 200) return null;
+    return JSON.parse(res.getContentText());
+  } catch(e) {
+    Logger.log('sofaFetch error: ' + e.message);
+    return null;
+  }
+}
+
+function refreshFixtures() {
+  try {
+    const [last0, last1, last2, next0] = [
+      sofaFetch('/team/1954/events/last/0'),
+      sofaFetch('/team/1954/events/last/1'),
+      sofaFetch('/team/1954/events/last/2'),
+      sofaFetch('/team/1954/events/next/0'),
+    ];
+
+    const all = [
+      ...(last2?.events || []),
+      ...(last1?.events || []),
+      ...(last0?.events || []),
+      ...(next0?.events || []),
+    ];
+
+    // Remove duplicatas
+    const seen = new Set();
+    const unique = all.filter(f => {
+      if (seen.has(f.id)) return false;
+      seen.add(f.id);
+      return true;
+    });
+
+    // Competições monitoradas
+    const MONITORED = ['Brasileirão','Serie A','Copa do Brasil','Libertadores','CONMEBOL','Mineiro','Friendly'];
+    const filtered = unique.filter(f => {
+      const name = f.tournament?.name || '';
+      return MONITORED.some(m => name.toLowerCase().includes(m.toLowerCase()));
+    });
+
+    // Salva na planilha
+    const sheet = getSheet('Jogos');
+    sheet.clearContents();
+    sheet.appendRow(['id','homeTeam','homeTeamId','awayTeam','awayTeamId',
+      'homeScore','awayScore','status','timestamp','tournament','updatedAt']);
+
+    const now = new Date().toISOString();
+    filtered.forEach(f => {
+      sheet.appendRow([
+        f.id,
+        f.homeTeam?.name || '',
+        f.homeTeam?.id || '',
+        f.awayTeam?.name || '',
+        f.awayTeam?.id || '',
+        f.homeScore?.current ?? '',
+        f.awayScore?.current ?? '',
+        f.status?.type || '',
+        f.startTimestamp || '',
+        f.tournament?.name || '',
+        now,
+      ]);
+    });
+
+    return { ok: true, count: filtered.length };
+  } catch(e) {
+    return { ok: false, error: e.message };
+  }
+}
+
+function getFixtures() {
+  const sheet = getSheet('Jogos');
+  const data  = sheet.getDataRange().getValues();
+  if (data.length <= 1) {
+    // Se não tem dados, busca agora
+    const refresh = refreshFixtures();
+    if (!refresh.ok) return { ok: false, error: refresh.error };
+    return getFixtures(); // recursivo após refresh
+  }
+
+  const [headers, ...rows] = data;
+  const fixtures = rows.map(r => ({
+    id:          r[0],
+    homeTeam:    { name: r[1], id: r[2] },
+    awayTeam:    { name: r[3], id: r[4] },
+    homeScore:   { current: r[5] !== '' ? r[5] : null },
+    awayScore:   { current: r[6] !== '' ? r[6] : null },
+    status:      { type: r[7] },
+    startTimestamp: r[8],
+    tournament:  { name: r[9] },
+  }));
+
+  return { ok: true, fixtures };
+}
+
+function getLineup({ fixtureId }) {
+  try {
+    const data = sofaFetch('/event/' + fixtureId + '/lineups');
+    if (!data) return { ok: false, error: 'Sem dados de escalação' };
+
+    // Descobre qual time é o Cruzeiro
+    const cruzTeam = (data.home?.team?.name || '').toLowerCase().includes('cruzeiro')
+      ? data.home : data.away;
+    if (!cruzTeam?.players) return { ok: true, participated: [], all: [] };
+
+    const participated = [];
+    const all = [];
+
+    cruzTeam.players.forEach(p => {
+      const player = {
+        id:      p.player.id,
+        name:    p.player.name,
+        pos:     p.player.position || '',
+        number:  p.jerseyNumber || '',
+        played:  !p.substitute,
+        starter: !p.substitute,
+      };
+      all.push(player);
+      if (!p.substitute) participated.push(player);
+
+      // Verifica minutos jogados para substitutos
+      if (p.substitute) {
+        const mins = p.statistics?.minutesPlayed;
+        if (mins && mins > 0) {
+          player.played = true;
+          participated.push(player);
+        }
+      }
+    });
+
+    return { ok: true, participated, all };
+  } catch(e) {
+    return { ok: false, error: e.message };
+  }
 }
