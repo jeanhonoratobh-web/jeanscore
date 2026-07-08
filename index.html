@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>JeanScore – Avaliações do Cruzeiro</title>
+  <link rel="stylesheet" href="css/style.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+</head>
+<body>
+
+  <!-- HEADER -->
+  <header class="header">
+    <div class="header-inner">
+      <div class="logo">
+        <span class="logo-fox">🦊</span>
+        <span class="logo-text">Jean<span class="logo-accent">Score</span></span>
+      </div>
+      <nav class="nav" id="mainNav">
+        <a href="#elenco" class="nav-link active" data-page="elenco">Elenco</a>
+        <a href="#jogos" class="nav-link" data-page="jogos">Jogos</a>
+        <a href="#rankings" class="nav-link" data-page="rankings">Rankings</a>
+        <a href="#avaliar" class="nav-link" data-page="avaliar" id="navAvaliar" style="display:none">Avaliar</a>
+        <a href="#admin" class="nav-link" data-page="admin" id="navAdmin" style="display:none">Admin</a>
+      </nav>
+      <div class="header-actions">
+        <div id="authArea">
+          <button class="btn btn-outline" id="btnLogin">Entrar</button>
+          <button class="btn btn-primary" id="btnRegister">Cadastrar</button>
+        </div>
+        <div id="userArea" style="display:none">
+          <span class="user-greeting" id="userGreeting"></span>
+          <button class="btn btn-outline" id="btnLogout">Sair</button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- MAIN CONTENT -->
+  <main class="main">
+
+    <!-- PAGE: ELENCO -->
+    <section id="page-elenco" class="page active">
+      <div class="container">
+        <div class="section-header">
+          <h2>Elenco do Cruzeiro</h2>
+          <div class="filters">
+            <button class="filter-btn active" data-pos="all">Todos</button>
+            <button class="filter-btn" data-pos="Goalkeeper">Goleiros</button>
+            <button class="filter-btn" data-pos="Defender">Defensores</button>
+            <button class="filter-btn" data-pos="Midfielder">Meio-campistas</button>
+            <button class="filter-btn" data-pos="Attacker">Atacantes</button>
+          </div>
+        </div>
+        <div class="players-grid" id="playersGrid">
+          <div class="loading-spinner"><i class="fas fa-futbol fa-spin"></i> Carregando elenco...</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- PAGE: JOGOS -->
+    <section id="page-jogos" class="page">
+      <div class="container">
+        <div class="section-header">
+          <h2>Jogos</h2>
+          <div class="filters">
+            <button class="filter-btn active" data-comp="all">Todos</button>
+            <button class="filter-btn" data-comp="71">Série A</button>
+            <button class="filter-btn" data-comp="73">Copa do Brasil</button>
+            <button class="filter-btn" data-comp="13">Libertadores</button>
+            <button class="filter-btn" data-comp="629">Mineiro</button>
+          </div>
+        </div>
+        <div class="jogos-tabs">
+          <button class="tab-btn active" data-tab="proximos">Próximos</button>
+          <button class="tab-btn" data-tab="anteriores">Anteriores</button>
+        </div>
+        <div id="jogosList" class="jogos-list">
+          <div class="loading-spinner"><i class="fas fa-futbol fa-spin"></i> Carregando jogos...</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- PAGE: RANKINGS -->
+    <section id="page-rankings" class="page">
+      <div class="container">
+        <div class="section-header">
+          <h2>Rankings</h2>
+        </div>
+        <div class="rankings-grid">
+          <div class="ranking-card">
+            <h3><i class="fas fa-star"></i> Melhores Notas Gerais</h3>
+            <div id="rankingGeral" class="ranking-list">
+              <div class="loading-spinner"><i class="fas fa-futbol fa-spin"></i></div>
+            </div>
+          </div>
+          <div class="ranking-card">
+            <h3><i class="fas fa-trophy"></i> Melhores por Jogo</h3>
+            <div id="rankingJogo" class="ranking-list">
+              <div class="loading-spinner"><i class="fas fa-futbol fa-spin"></i></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- PAGE: AVALIAR (requer login) -->
+    <section id="page-avaliar" class="page">
+      <div class="container">
+        <div class="section-header">
+          <h2>Avaliar Jogadores</h2>
+        </div>
+        <div id="avaliarContent">
+          <p class="info-text">Selecione um jogo para avaliar os jogadores.</p>
+          <div id="avaliarJogosList" class="jogos-list"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- PAGE: ADMIN -->
+    <section id="page-admin" class="page">
+      <div class="container">
+        <div class="section-header">
+          <h2>Painel Admin</h2>
+        </div>
+        <div class="admin-tabs">
+          <button class="tab-btn active" data-admin-tab="pendentes">Cadastros Pendentes</button>
+          <button class="tab-btn" data-admin-tab="usuarios">Usuários</button>
+          <button class="tab-btn" data-admin-tab="notas">Notas Principais</button>
+        </div>
+        <div id="adminContent" class="admin-content">
+          <div id="admin-pendentes">
+            <div id="pendentesList" class="pending-list"></div>
+          </div>
+          <div id="admin-usuarios" style="display:none">
+            <div id="usuariosList" class="users-list"></div>
+          </div>
+          <div id="admin-notas" style="display:none">
+            <div id="notasAdminList" class="players-grid"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- MODAL: LOGIN -->
+  <div class="modal-overlay" id="modalLogin">
+    <div class="modal">
+      <button class="modal-close" id="closeLogin"><i class="fas fa-times"></i></button>
+      <h2>Entrar</h2>
+      <form id="formLogin">
+        <div class="form-group">
+          <label>Usuário</label>
+          <input type="text" id="loginUser" placeholder="Seu nome de usuário" required />
+        </div>
+        <div class="form-group">
+          <label>Senha</label>
+          <input type="password" id="loginPass" placeholder="Sua senha" required />
+        </div>
+        <div class="form-error" id="loginError"></div>
+        <button type="submit" class="btn btn-primary btn-full">Entrar</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: CADASTRO -->
+  <div class="modal-overlay" id="modalRegister">
+    <div class="modal">
+      <button class="modal-close" id="closeRegister"><i class="fas fa-times"></i></button>
+      <h2>Cadastrar</h2>
+      <form id="formRegister">
+        <div class="form-group">
+          <label>Nome de Usuário</label>
+          <input type="text" id="regUser" placeholder="Escolha um nome de usuário" required />
+        </div>
+        <div class="form-group">
+          <label>E-mail</label>
+          <input type="email" id="regEmail" placeholder="Seu e-mail" required />
+        </div>
+        <div class="form-group">
+          <label>Senha</label>
+          <input type="password" id="regPass" placeholder="Escolha uma senha" required minlength="6" />
+        </div>
+        <div class="form-error" id="regError"></div>
+        <div class="form-success" id="regSuccess"></div>
+        <button type="submit" class="btn btn-primary btn-full">Solicitar Cadastro</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: AVALIAR JOGO -->
+  <div class="modal-overlay" id="modalAvaliarJogo">
+    <div class="modal modal-large">
+      <button class="modal-close" id="closeAvaliarJogo"><i class="fas fa-times"></i></button>
+      <h2 id="modalAvaliarTitle">Avaliar Jogo</h2>
+      <div id="modalAvaliarContent" class="avaliar-players-grid"></div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" id="btnSalvarNotas">Salvar Notas</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: NOTA PRINCIPAL (ADMIN) -->
+  <div class="modal-overlay" id="modalNotaPrincipal">
+    <div class="modal">
+      <button class="modal-close" id="closeNotaPrincipal"><i class="fas fa-times"></i></button>
+      <h2 id="modalNotaPrincipalTitle">Nota Principal</h2>
+      <div id="modalNotaPrincipalContent"></div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" id="btnSalvarNotaPrincipal">Salvar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TOAST -->
+  <div class="toast" id="toast"></div>
+
+  <script src="js/config.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/sheets.js"></script>
+  <script src="js/auth.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
