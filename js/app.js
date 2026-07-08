@@ -213,7 +213,7 @@ Object.assign(APP, {
         <span class="jogo-status-badge ${status.css}">${status.live ? '🔴 AO VIVO' : status.label}</span>
         <div class="jogo-actions">
           ${status.done && AUTH.isLoggedIn()
-            ? `<button class="btn btn-sm btn-primary" onclick="APP.openRatingModal(${f.id})">
+            ? `<button class="btn btn-sm btn-primary" onclick="APP.openRatingModal('${f.id}')">
                 ${hasScores ? '✏️ Reeditar' : '⭐ Avaliar'}</button>` : ''}
         </div>
       </div>`;
@@ -229,8 +229,12 @@ Object.assign(APP, {
 
   async openRatingModal(fixtureId) {
     if (!AUTH.isLoggedIn()) { showToast('Você precisa estar logado para avaliar.', 'error'); return; }
-    const fixture = this.allFixtures.find(f => f.id === fixtureId);
-    if (!fixture) return;
+    const fixture = this.allFixtures.find(f => String(f.id) === String(fixtureId));
+    if (!fixture) {
+      console.warn('Fixture não encontrado:', fixtureId, 'Total fixtures:', this.allFixtures.length);
+      showToast('Jogo não encontrado. Recarregue a página.', 'error');
+      return;
+    }
 
     const modal   = document.getElementById('modalAvaliarJogo');
     const title   = document.getElementById('modalAvaliarTitle');
@@ -338,10 +342,10 @@ Object.assign(APP, {
       return;
     }
     const content = document.getElementById('avaliarJogosList');
-    if (!this.allFixtures.length) {
-      content.innerHTML = '<div class="loading-spinner"><i class="fas fa-futbol fa-spin"></i></div>';
-      this.allFixtures = await API.getAllFixtures();
-    }
+    content.innerHTML = '<div class="loading-spinner"><i class="fas fa-futbol fa-spin"></i></div>';
+    // Sempre recarrega para garantir dados frescos
+    this.allFixtures = await API.getAllFixtures();
+
     const past = this.allFixtures.filter(f => API.formatStatus(f).done && API.isMonitoredComp(f))
       .slice().reverse();
 
@@ -354,7 +358,7 @@ Object.assign(APP, {
       const sc   = API.getScore(f);
       return `<div class="jogo-card">
         <span class="jogo-comp-badge">${API.compFlag(f)} ${API.compName(f)}</span>
-        <div class="jogo-times">
+        <div class="jogo-teams">
           <div class="jogo-team">
             <img class="jogo-team-logo" src="${f.homeTeam?.logo || `https://a.espncdn.com/i/teamlogos/soccer/500/${f.homeTeam?.id}.png`}"
               alt="${f.homeTeam?.name}" onerror="this.style.display='none'" />
@@ -369,7 +373,7 @@ Object.assign(APP, {
         </div>
         <div class="jogo-date">${API.formatDate(f.startTimestamp)}</div>
         <div class="jogo-actions">
-          <button class="btn btn-sm btn-primary" onclick="APP.openRatingModal(${f.id})">
+          <button class="btn btn-sm btn-primary" onclick="APP.openRatingModal('${f.id}')">
             ${rated ? '✏️ Editar notas' : '⭐ Dar notas'}</button>
         </div>
       </div>`;
