@@ -21,6 +21,7 @@ const CONFIG = {
     73:  { name: 'Copa do Brasil',    short: 'Copa BR',  flag: '🇧🇷', sofaId: 390  },
     13:  { name: 'Libertadores',      short: 'Libertad', flag: '🌎',  sofaId: 384  },
     629: { name: 'Campeonato Mineiro',short: 'Mineiro',  flag: '🇧🇷', sofaId: 893  },
+    999: { name: 'Amistoso',          short: 'Amistoso', flag: '🤝',  sofaId: null },
   },
 
   // Mapeamento nome SofaScore → ID competição local
