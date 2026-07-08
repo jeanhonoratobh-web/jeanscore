@@ -9,6 +9,7 @@ const PLAYER_PHOTOS = {
   'Wanderson':'Wanderson.jpg','Willian':'Willian.jpg','Mateus Pereira':'Mateus Pereira.jpg',
   'Gabigol':'Gabigol.jpg','Kaio Jorge':'Kaio Jorge.jpg','Kaua Prates':'Kaua Prates.jpg',
   'Lautaro Diaz':'Lautaro Diaz.jpg','Sinisterra':'Sinisterra.jpg','Bolasie':'Bolasie.jpg',
+  'Gabriel Pec':'Gabriel Pec.jpg',
   'Eduardo':'Eduardo.png','Gamarra':'Gamarra.png','Japa':'Japa.png',
   'Joao Marcelo':'Joao Marcelo.png','Jonathan Jesus':'Jonathan Jesus.png',
   'Leo Aragao':'Leo Aragao.png','Marquinhos':'Marquinhos.png',
