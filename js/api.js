@@ -79,38 +79,98 @@ const API = {
     }
   },
 
-  // Últimos jogos (página 0 = últimos 10, página 1 = 10 anteriores...)
-  async getLastFixtures(page = 0) {
-    const data = await this._sofaRequest(`/team/${CONFIG.CRUZEIRO_SOFA_ID}/events/last/${page}`);
-    return data?.events || [];
+  // ─────────────────────────────────────────
+  // ESPN API (jogos — pública, sem chave, CORS OK)
+  // ─────────────────────────────────────────
+  ESPN_BASE: 'https://site.api.espn.com/apis/site/v2/sports/soccer',
+  ESPN_CRUZEIRO_ID: '2022',
+
+  // Competições ESPN → IDs locais
+  ESPN_LEAGUE_MAP: {
+    'bra.1':  { id: 71,  name: 'Série A',        short: 'Série A',  flag: '🇧🇷' },
+    'bra.2':  { id: 73,  name: 'Copa do Brasil',  short: 'Copa BR',  flag: '🇧🇷' },
+    'conmebol.libertadores': { id: 13, name: 'Libertadores', short: 'Libertad', flag: '🌎' },
+    'bra.mineiro': { id: 629, name: 'Mineiro', short: 'Mineiro', flag: '🇧🇷' },
   },
 
-  // Próximos jogos
-  async getNextFixtures(page = 0) {
-    const data = await this._sofaRequest(`/team/${CONFIG.CRUZEIRO_SOFA_ID}/events/next/${page}`);
-    return data?.events || [];
-  },
+  ESPN_LEAGUES: ['bra.1', 'conmebol.libertadores', 'bra.2'],
 
-  // Todos os jogos via Apps Script proxy
-  async getAllFixtures() {
-    if (isSheetsConfigured()) {
-      try {
-        const res = await fetch(CONFIG.SHEETS_API_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'text/plain' },
-          body: JSON.stringify({ action: 'getFixtures' }),
-        });
-        const data = await res.json();
-        if (data.ok && data.fixtures?.length) return data.fixtures;
-      } catch(e) {
-        console.warn('Proxy fixtures falhou:', e);
-      }
+  async _espnRequest(path) {
+    const url = `${this.ESPN_BASE}${path}`;
+    const cached = cacheGet(url);
+    if (cached) return cached;
+    try {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      cacheSet(url, data);
+      return data;
+    } catch(e) {
+      console.error('Erro ESPN:', e);
+      return null;
     }
-    return [];
   },
 
-  // Escalação via Apps Script proxy
+  async getAllFixtures() {
+    const results = await Promise.all(
+      this.ESPN_LEAGUES.map(league =>
+        this._espnRequest(`/${league}/teams/${this.ESPN_CRUZEIRO_ID}/schedule?season=2026`)
+      )
+    );
+
+    const all = [];
+    const seen = new Set();
+
+    results.forEach((data, i) => {
+      const league = this.ESPN_LEAGUES[i];
+      const leagueInfo = this.ESPN_LEAGUE_MAP[league] || {};
+      if (!data?.events) return;
+
+      data.events.forEach(ev => {
+        if (seen.has(ev.id)) return;
+        seen.add(ev.id);
+
+        const comp = ev.competitions?.[0];
+        if (!comp) return;
+
+        const cruzeiro = comp.competitors?.find(c =>
+          c.team?.id === this.ESPN_CRUZEIRO_ID ||
+          (c.team?.displayName || '').toLowerCase().includes('cruzeiro')
+        );
+        const opponent = comp.competitors?.find(c => c !== cruzeiro);
+
+        const isHome = cruzeiro?.homeAway === 'home';
+        const homeTeam = isHome ? cruzeiro : opponent;
+        const awayTeam = isHome ? opponent : cruzeiro;
+
+        all.push({
+          id:         ev.id,
+          homeTeam:   { name: homeTeam?.team?.displayName || '?', id: homeTeam?.team?.id, logo: homeTeam?.team?.logo },
+          awayTeam:   { name: awayTeam?.team?.displayName || '?', id: awayTeam?.team?.id, logo: awayTeam?.team?.logo },
+          homeScore:  { current: homeTeam?.score ?? null },
+          awayScore:  { current: awayTeam?.score ?? null },
+          status:     { type: this._espnStatusToSofa(ev.status?.type?.name) },
+          startTimestamp: Math.floor(new Date(ev.date).getTime() / 1000),
+          tournament: { name: leagueInfo.name || league, id: leagueInfo.id },
+          _leagueId:  leagueInfo.id,
+        });
+      });
+    });
+
+    return all.sort((a, b) => a.startTimestamp - b.startTimestamp);
+  },
+
+  _espnStatusToSofa(espnStatus) {
+    if (!espnStatus) return 'notstarted';
+    const s = espnStatus.toLowerCase();
+    if (s.includes('final') || s.includes('ft') || s.includes('full')) return 'finished';
+    if (s.includes('progress') || s.includes('live') || s.includes('half')) return 'inprogress';
+    if (s.includes('postponed')) return 'postponed';
+    return 'notstarted';
+  },
+
   async getLineup(fixtureId) {
+    // ESPN não tem escalação detalhada gratuita — usa Apps Script se disponível
     if (isSheetsConfigured()) {
       try {
         const res = await fetch(CONFIG.SHEETS_API_URL, {
@@ -120,9 +180,7 @@ const API = {
         });
         const data = await res.json();
         if (data.ok) return { participated: data.participated || [], all: data.all || [] };
-      } catch(e) {
-        console.warn('Proxy lineup falhou:', e);
-      }
+      } catch(e) {}
     }
     return { participated: [], all: [] };
   },
@@ -155,15 +213,11 @@ const API = {
   },
 
   compName(fixture) {
-    const name = fixture.tournament?.name || fixture.tournament?.uniqueTournament?.name || '';
-    const id = this.getTournamentId(name);
-    if (id && CONFIG.COMPETITIONS[id]) return CONFIG.COMPETITIONS[id].short;
-    return name || 'Outro';
+    return fixture.tournament?.name || fixture.tournament?.short || 'Outro';
   },
 
   compFlag(fixture) {
-    const name = fixture.tournament?.name || '';
-    const id = this.getTournamentId(name);
+    const id = fixture._leagueId || fixture.tournament?.id;
     if (id && CONFIG.COMPETITIONS[id]) return CONFIG.COMPETITIONS[id].flag;
     return '⚽';
   },

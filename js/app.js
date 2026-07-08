@@ -190,8 +190,8 @@ Object.assign(APP, {
       const scoreStr = (status.done || status.live) ? `${score.home} – ${score.away}` : 'vs';
       const gs       = SHEETS.local.getGameScores();
       const hasScores = gs[f.id] && Object.keys(gs[f.id]).length > 0;
-      const homeLogo = f.homeTeam?.id ? `https://api.sofascore.com/api/v1/team/${f.homeTeam.id}/image` : '';
-      const awayLogo = f.awayTeam?.id ? `https://api.sofascore.com/api/v1/team/${f.awayTeam.id}/image` : '';
+      const homeLogo = f.homeTeam?.logo || (f.homeTeam?.id ? `https://a.espncdn.com/i/teamlogos/soccer/500/${f.homeTeam.id}.png` : '');
+      const awayLogo = f.awayTeam?.logo || (f.awayTeam?.id ? `https://a.espncdn.com/i/teamlogos/soccer/500/${f.awayTeam.id}.png` : '');
 
       return `<div class="jogo-card" data-fixture="${f.id}">
         <span class="jogo-comp-badge">${API.compFlag(f)} ${API.compName(f)}</span>
@@ -351,15 +351,15 @@ Object.assign(APP, {
       const sc   = API.getScore(f);
       return `<div class="jogo-card">
         <span class="jogo-comp-badge">${API.compFlag(f)} ${API.compName(f)}</span>
-        <div class="jogo-teams">
+        <div class="jogo-times">
           <div class="jogo-team">
-            <img class="jogo-team-logo" src="https://api.sofascore.com/api/v1/team/${f.homeTeam?.id}/image"
+            <img class="jogo-team-logo" src="${f.homeTeam?.logo || `https://a.espncdn.com/i/teamlogos/soccer/500/${f.homeTeam?.id}.png`}"
               alt="${f.homeTeam?.name}" onerror="this.style.display='none'" />
             <div class="jogo-team-name">${f.homeTeam?.name || '—'}</div>
           </div>
           <div class="jogo-placar">${sc.home} – ${sc.away}</div>
           <div class="jogo-team">
-            <img class="jogo-team-logo" src="https://api.sofascore.com/api/v1/team/${f.awayTeam?.id}/image"
+            <img class="jogo-team-logo" src="${f.awayTeam?.logo || `https://a.espncdn.com/i/teamlogos/soccer/500/${f.awayTeam?.id}.png`}"
               alt="${f.awayTeam?.name}" onerror="this.style.display='none'" />
             <div class="jogo-team-name">${f.awayTeam?.name || '—'}</div>
           </div>
