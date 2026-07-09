@@ -466,9 +466,19 @@ Object.assign(APP, {
 
   async openRatingModal(fixtureId) {
     if (!AUTH.isLoggedIn()) { showToast('Você precisa estar logado para avaliar.', 'error'); return; }
-    const fixture = this.allFixtures.find(f => String(f.id) === String(fixtureId));
+
+    // Garante que o squad está carregado
+    if (!this.squad.length) {
+      this.squad = await API.getSquad();
+    }
+
+    // Garante que os fixtures estão carregados
+    if (!this.allFixtures.length) {
+      this.allFixtures = API.getAllFixtures();
+    }
+
+    let fixture = this.allFixtures.find(f => String(f.id) === String(fixtureId));
     if (!fixture) {
-      console.warn('Fixture não encontrado:', fixtureId, 'Total fixtures:', this.allFixtures.length);
       showToast('Jogo não encontrado. Recarregue a página.', 'error');
       return;
     }

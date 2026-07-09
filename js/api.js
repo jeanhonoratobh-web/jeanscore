@@ -89,14 +89,20 @@ const API = {
       const escalacoes = JSON.parse(localStorage.getItem('js_escalacoes') || '{}');
       const playerIds  = escalacoes[String(fixtureId)];
       if (playerIds && playerIds.length > 0) {
-        const squad = window.APP?.squad || [];
+        // Usa APP.squad — garante que está carregado
+        const squad = (typeof APP !== 'undefined' && APP.squad?.length) ? APP.squad : [];
+        if (!squad.length) {
+          // Squad ainda não carregado — retorna IDs sem dados completos
+          // openRatingModal vai buscar os dados do squad quando disponível
+          return { participated: playerIds.map(id => ({ id, name: '', pos: '', played: true, starter: true })), all: [] };
+        }
         const participated = playerIds.map(id => {
           const p = squad.find(s => String(s.id) === String(id));
           return p ? { id: p.id, name: p.name, pos: p.position, played: true, starter: true } : null;
         }).filter(Boolean);
         if (participated.length > 0) return { participated, all: participated };
       }
-    } catch(e) {}
+    } catch(e) { console.error('getLineup error:', e); }
     return { participated: [], all: [] };
   },
 
