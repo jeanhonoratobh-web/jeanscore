@@ -1232,7 +1232,8 @@ body {
   max-height: 65vh;
   overflow-y: auto;
   padding-right: 4px;
-  width: 100%;
+  width: 750px;
+  max-width: 100%;
 }
 
 .rating-list-item {
