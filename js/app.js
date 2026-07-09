@@ -458,6 +458,8 @@ Object.assign(APP, {
         }).join('')}
       </div>`;
   },
+
+  async openRatingModal(fixtureId) {
     if (!AUTH.isLoggedIn()) { showToast('Você precisa estar logado para avaliar.', 'error'); return; }
     const fixture = this.allFixtures.find(f => String(f.id) === String(fixtureId));
     if (!fixture) {
