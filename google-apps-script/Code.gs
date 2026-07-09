@@ -38,6 +38,8 @@ function doPost(e) {
       getFixtures:     () => getFixtures(),
       refreshFixtures: () => refreshFixtures(),
       getLineup:       () => getLineup(payload),
+      saveNotaPermanente: () => saveNotaPermanente(payload),
+      getNotasPermanentes: () => getNotasPermanentes(payload),
     };
 
     if (!handlers[action]) return jsonResponse({ ok: false, error: 'Ação inválida' });
@@ -414,6 +416,16 @@ function sofaFetch(path) {
   }
 }
 
+function debugFixtures() {
+  const url = 'https://api.sofascore.com/api/v1/team/1954/events/last/0';
+  const res = UrlFetchApp.fetch(url, {
+    headers: SOFA_HEADERS_GAS,
+    muteHttpExceptions: true,
+  });
+  Logger.log('HTTP Code: ' + res.getResponseCode());
+  Logger.log('Resposta: ' + res.getContentText().substring(0, 300));
+}
+
 function refreshFixtures() {
   try {
     const [last0, last1, last2, next0] = [
@@ -538,4 +550,52 @@ function getLineup({ fixtureId }) {
   } catch(e) {
     return { ok: false, error: e.message };
   }
+}
+
+// =============================================
+// NOTAS PERMANENTES
+// =============================================
+
+function saveNotaPermanente({ playerId, playerName, username, year, nota }) {
+  const sheetName = `NotasPermanentes${year}`;
+  const sheet = getSheet(sheetName);
+  const data  = sheet.getDataRange().getValues();
+
+  // Verifica se usuário já votou nesse jogador nesse ano
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][0]) === String(playerId) && data[i][2] === username) {
+      return { ok: false, error: 'Você já deu nota permanente para este jogador este ano.' };
+    }
+  }
+
+  sheet.appendRow([playerId, playerName, username, parseFloat(nota), year, new Date().toISOString()]);
+  return { ok: true };
+}
+
+function getNotasPermanentes({ year }) {
+  const sheetName = `NotasPermanentes${year}`;
+  const sheet = getSheet(sheetName);
+  const data  = sheet.getDataRange().getValues();
+  if (data.length <= 1) return { ok: true, scores: {} };
+
+  const [headers, ...rows] = data;
+
+  // Agrega por jogador: média de todas as notas
+  const byPlayer = {};
+  rows.forEach(r => {
+    const pid   = String(r[0]);
+    const nota  = parseFloat(r[3]);
+    const user  = r[2];
+    if (!byPlayer[pid]) byPlayer[pid] = { name: r[1], notes: [], users: {} };
+    byPlayer[pid].notes.push(nota);
+    byPlayer[pid].users[user] = nota;
+  });
+
+  const scores = {};
+  Object.entries(byPlayer).forEach(([pid, d]) => {
+    const avg = (d.notes.reduce((a, b) => a + b, 0) / d.notes.length).toFixed(1);
+    scores[pid] = { avg: parseFloat(avg), votes: d.notes.length, byUser: d.users };
+  });
+
+  return { ok: true, scores };
 }

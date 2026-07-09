@@ -89,9 +89,19 @@ const APP = {
       grid.innerHTML = '<div class="empty-state"><i class="fas fa-users-slash"></i>Não foi possível carregar o elenco.</div>';
       return;
     }
-    const mainScores = isSheetsConfigured()
-      ? (await SHEETS.getMainScores())?.scores || {}
-      : SHEETS.local.getMainScores();
+    const year = new Date().getFullYear();
+    let mainScores = {};
+    if (isSheetsConfigured()) {
+      const res = await SHEETS.request('getNotasPermanentes', { year });
+      if (res?.ok) mainScores = res.scores || {};
+    } else {
+      // Fallback: localStorage por ano
+      const key = `js_notaperm_${year}`;
+      const local = JSON.parse(localStorage.getItem(key) || '{}');
+      Object.entries(local).forEach(([pid, nota]) => {
+        mainScores[pid] = { avg: nota, votes: 1 };
+      });
+    }
     this._renderPlayers(squad, mainScores, 'all');
     document.querySelectorAll('.filters .filter-btn[data-pos]').forEach(btn => {
       btn.addEventListener('click', () => {
@@ -104,30 +114,111 @@ const APP = {
 
   _renderPlayers(squad, mainScores, posFilter) {
     const grid = document.getElementById('playersGrid');
+    grid.className = 'players-grid-fifa';
     let players = posFilter === 'all' ? squad : squad.filter(p => p.position === posFilter);
     if (!players.length) {
       grid.innerHTML = '<div class="empty-state"><i class="fas fa-search"></i>Nenhum jogador encontrado.</div>';
       return;
     }
+
+    const year = new Date().getFullYear();
+
     grid.innerHTML = players.map(p => {
       const scoreData = mainScores[p.id];
-      const avg   = scoreData ? (typeof scoreData === 'object' ? scoreData.avg : scoreData) : null;
-      const votes = scoreData?.votes || '';
-      return `<div class="player-card" data-id="${p.id}">
-        <div class="player-img-wrap">${playerImgHTML(p.name, p.photo)}</div>
-        <div class="player-info">
-          <div class="player-name">${p.name}</div>
-          <div class="player-pos">${translatePos(p.position)}</div>
-          <div class="player-number">#${p.number || '—'}</div>
-          <div class="player-score">
-            <span class="score-badge ${avg ? '' : 'no-score'}" style="${avg ? scoreColor(avg) : ''}">
-              ${avg || '—'}
-            </span>
-            ${votes ? `<span class="score-votes">${votes} voto${votes > 1 ? 's' : ''}</span>` : ''}
+      const avg   = scoreData ? (typeof scoreData === 'object' ? parseFloat(scoreData.avg) : parseFloat(scoreData)) : null;
+      const votes = scoreData?.votes || 0;
+
+      // Raridade baseada na nota
+      let rarity = 'rarity-bronze';
+      if (avg === null)   rarity = 'rarity-bronze';
+      else if (avg >= 8)  rarity = 'rarity-inform';
+      else if (avg >= 7)  rarity = 'rarity-gold';
+      else if (avg >= 6)  rarity = 'rarity-silver';
+
+      const rating = avg !== null ? Math.round(avg * 10) : '?';
+      const photo  = p.photo || getPlayerPhoto(p.name) || '';
+      const posShort = { Goalkeeper: 'GOL', Defender: 'DEF', Midfielder: 'MEI', Attacker: 'ATA' }[p.position] || p.position || '—';
+
+      // Stats fictícios baseados na nota (para visual)
+      const base = avg ? Math.round(avg * 10) : 65;
+      const stats = this._generateStats(p.position, base);
+
+      return `
+      <div class="fifa-card" onclick="APP.openPlayerDetail('${p.id}')">
+        <div class="fifa-card-inner ${rarity}">
+          <div class="fifa-card-top">
+            <div class="fifa-card-left">
+              <div class="fifa-card-rating">${rating}</div>
+              <div class="fifa-card-pos-label">${posShort}</div>
+              <div class="fifa-flag">🇧🇷</div>
+            </div>
+            <div class="fifa-card-photo-wrap">
+              ${photo
+                ? `<img class="fifa-card-photo" src="${photo}" alt="${p.name}" onerror="this.style.display='none'" />`
+                : `<div class="fifa-card-photo-placeholder"><i class="fas fa-user"></i></div>`
+              }
+            </div>
           </div>
+          <div class="fifa-card-divider"></div>
+          <div class="fifa-card-name">${p.name}</div>
+          <div class="fifa-card-divider"></div>
+          <div class="fifa-card-stats">
+            ${stats.map(s => `
+              <div class="fifa-stat">
+                <span class="fifa-stat-val">${s.val}</span>
+                <span class="fifa-stat-label">${s.label}</span>
+              </div>`).join('')}
+          </div>
+          ${votes ? `<div class="fifa-card-score-badge">${votes} voto${votes > 1 ? 's' : ''}</div>` : ''}
         </div>
       </div>`;
     }).join('');
+  },
+
+  _generateStats(position, base) {
+    const v = (b, offset) => Math.min(99, Math.max(40, b + offset + Math.floor(Math.random() * 5 - 2)));
+    const maps = {
+      Goalkeeper: [
+        { label: 'DIS', val: v(base, 5)  },
+        { label: 'REF', val: v(base, 3)  },
+        { label: 'VEL', val: v(base, -10) },
+        { label: 'CHU', val: v(base, -15) },
+        { label: 'POS', val: v(base, 2)  },
+        { label: 'RIT', val: v(base, -5) },
+      ],
+      Defender: [
+        { label: 'RIT', val: v(base, -5) },
+        { label: 'DEF', val: v(base, 8)  },
+        { label: 'FIS', val: v(base, 5)  },
+        { label: 'DRI', val: v(base, -8) },
+        { label: 'PAS', val: v(base, -2) },
+        { label: 'CHU', val: v(base, -8) },
+      ],
+      Midfielder: [
+        { label: 'RIT', val: v(base, 2)  },
+        { label: 'PAS', val: v(base, 6)  },
+        { label: 'DRI', val: v(base, 3)  },
+        { label: 'DEF', val: v(base, -2) },
+        { label: 'FIS', val: v(base, 0)  },
+        { label: 'CHU', val: v(base, 0)  },
+      ],
+    };
+    return maps[position] || [
+      { label: 'RIT', val: v(base, 5)  },
+      { label: 'CHU', val: v(base, 8)  },
+      { label: 'PAS', val: v(base, 2)  },
+      { label: 'DRI', val: v(base, 6)  },
+      { label: 'DEF', val: v(base, -8) },
+      { label: 'FIS', val: v(base, 3)  },
+    ];
+  },
+
+  openPlayerDetail(playerId) {
+    // Futura página de detalhe do jogador
+    // Por enquanto só abre se for admin para dar nota permanente
+    if (AUTH.isAdmin() || AUTH.isLoggedIn()) {
+      this._openNotaPermanente(playerId);
+    }
   },
 };
 
@@ -888,5 +979,114 @@ Object.assign(APP, {
     localStorage.setItem('js_manualJogos', JSON.stringify(jogos));
     showToast('Jogo removido.');
     this._loadAdminJogosList();
+  },
+});
+
+// =============================================
+// NOTA PERMANENTE
+// =============================================
+
+Object.assign(APP, {
+
+  _openNotaPermanente(playerId) {
+    const year     = new Date().getFullYear();
+    const username = AUTH.getUsername();
+    if (!username) return;
+
+    // Verifica se já deu nota permanente esse ano
+    const key      = `js_notaperm_${year}`;
+    const existing = JSON.parse(localStorage.getItem(key) || '{}');
+
+    const player = this.squad.find(p => String(p.id) === String(playerId));
+    if (!player) return;
+
+    // Monta modal reutilizável
+    const modal   = document.getElementById('modalNotaPrincipal');
+    const title   = document.getElementById('modalNotaPrincipalTitle');
+    const content = document.getElementById('modalNotaPrincipalContent');
+    const btnSave = document.getElementById('btnSalvarNotaPrincipal');
+
+    const userNote = existing[playerId];
+    const alreadyRated = userNote !== undefined;
+
+    title.textContent = `Nota Permanente ${year} — ${player.name}`;
+
+    if (alreadyRated) {
+      content.innerHTML = `
+        <div style="text-align:center;padding:1.5rem 0">
+          <div class="nota-display">${userNote}</div>
+          <div class="nota-label">Sua nota permanente para ${player.name} em ${year}</div>
+          <p style="color:var(--gray-400);font-size:0.85rem;margin-top:1rem">
+            A nota permanente não pode ser alterada após submissão.
+          </p>
+        </div>`;
+      btnSave.style.display = 'none';
+    } else {
+      content.innerHTML = `
+        <div class="nota-principal-wrap">
+          <div class="nota-display" id="notaPermDisplay">5.0</div>
+          <div class="nota-label">Arraste para escolher sua nota permanente de ${year}</div>
+          <input type="range" class="nota-slider" id="notaPermSlider"
+            min="0" max="10" step="0.5" value="5" />
+          <p style="color:var(--gold);font-size:0.82rem;margin-top:0.5rem">
+            ⚠️ Essa nota não pode ser alterada depois de salva.
+          </p>
+        </div>`;
+      btnSave.style.display = '';
+
+      const slider  = document.getElementById('notaPermSlider');
+      const display = document.getElementById('notaPermDisplay');
+      slider.addEventListener('input', () => {
+        display.textContent = parseFloat(slider.value).toFixed(1);
+        const pct = (slider.value / 10) * 100;
+        slider.style.background = `linear-gradient(to right, var(--gold) ${pct}%, rgba(255,255,255,0.15) ${pct}%)`;
+      });
+
+      btnSave.onclick = () => this._salvarNotaPermanente(playerId, player.name, year);
+    }
+
+    modal.classList.add('open');
+  },
+
+  async _salvarNotaPermanente(playerId, playerName, year) {
+    const slider = document.getElementById('notaPermSlider');
+    if (!slider) return;
+    const nota     = parseFloat(slider.value);
+    const username = AUTH.getUsername();
+    const key      = `js_notaperm_${year}`;
+
+    // Salva localmente (por usuário)
+    const existing = JSON.parse(localStorage.getItem(key) || '{}');
+    existing[playerId] = nota;
+    localStorage.setItem(key, JSON.stringify(existing));
+
+    // Salva no Sheets
+    if (isSheetsConfigured()) {
+      await SHEETS.request('saveNotaPermanente', { playerId, playerName, username, year, nota });
+    }
+
+    // Atualiza mainScores local para refletir nova média
+    const allNotes = this._getAllPermNotes(playerId, year);
+    const avg = allNotes.length
+      ? (allNotes.reduce((a, b) => a + b, 0) / allNotes.length).toFixed(1)
+      : nota.toFixed(1);
+
+    const ms = SHEETS.local.getMainScores();
+    ms[playerId] = { avg: parseFloat(avg), votes: allNotes.length };
+    localStorage.setItem('js_mainScores', JSON.stringify(ms));
+
+    document.getElementById('modalNotaPrincipal').classList.remove('open');
+    showToast(`Nota permanente ${nota} salva para ${playerName}!`, 'success');
+
+    // Recarrega elenco para atualizar as cartas
+    this.loadElenco();
+  },
+
+  _getAllPermNotes(playerId, year) {
+    // Coleta todas as notas permanentes desse jogador nesse ano (de todos os usuários no localStorage)
+    const key = `js_notaperm_${year}`;
+    const notes = JSON.parse(localStorage.getItem(key) || '{}');
+    const val = notes[playerId];
+    return val !== undefined ? [val] : [];
   },
 });
