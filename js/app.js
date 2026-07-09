@@ -491,36 +491,36 @@ Object.assign(APP, {
 
     this.currentFixtureForRating = { fixtureId, fixture, participated, all };
 
-    const playersToShow = participated.length > 0 ? participated : this.squad.map(p => ({
-      id: p.id, name: p.name, pos: p.position, played: true, starter: false
-    }));
-
-    if (!playersToShow.length) {
-      content.innerHTML = '<p class="info-text">Escalação não disponível para este jogo.</p>';
+    // Só mostra jogadores da escalação — sem fallback para o elenco completo
+    if (!participated.length) {
+      content.innerHTML = `<p class="info-text">
+        Nenhum jogador cadastrado na escalação deste jogo.<br>
+        <small style="color:var(--gray-400)">O admin precisa cadastrar a escalação no painel Admin → Jogos.</small>
+      </p>`;
       return;
     }
 
-    content.innerHTML = playersToShow.map(p => {
-      const saved   = savedScores[p.id] ?? null;
-      const photo   = getPlayerPhoto(p.name) || p.photo || '';
-      const imgTag  = photo
-        ? `<img src="${photo}" alt="${p.name}" class="avaliar-player-img" onerror="this.style.opacity=0" />`
-        : `<div class="avaliar-player-img" style="background:var(--blue-mid);border-radius:50%;display:flex;align-items:center;justify-content:center">
-             <i class="fas fa-user" style="font-size:1.5rem;color:var(--gray-400)"></i></div>`;
-      return `<div class="avaliar-player-card ${saved !== null ? 'rated' : ''}" id="apc-${p.id}">
-        ${imgTag}
-        <div class="avaliar-player-name">${p.name}</div>
-        <div class="star-rating" data-player="${p.id}">
-          ${[1,2,3,4,5,6,7,8,9,10].map(n =>
-            `<button class="star-btn ${saved !== null && n <= saved ? 'active' : ''}"
-               data-val="${n}" onclick="APP.setRating(${p.id}, ${n})">★</button>`
-          ).join('')}
-        </div>
-        <input type="number" class="note-input" id="note-${p.id}"
-          min="0" max="10" step="0.5" value="${saved !== null ? saved : ''}" placeholder="0–10"
-          onchange="APP.setRatingInput(${p.id}, this.value)" />
-      </div>`;
-    }).join('');
+    const posShort = { Goalkeeper: 'GOL', Defender: 'DEF', Midfielder: 'MEI', Attacker: 'ATA' };
+
+    content.innerHTML = `<div class="rating-list">
+      ${participated.map(p => {
+        const saved = savedScores[p.id] ?? null;
+        const posLabel = posShort[p.pos] || p.pos || '—';
+        return `<div class="rating-list-item ${saved !== null ? 'rated' : ''}" id="apc-${p.id}">
+          <div class="rating-list-info">
+            <span class="rating-list-name">${p.name}</span>
+            <span class="rating-list-pos">${posLabel}</span>
+          </div>
+          <div class="rating-list-input">
+            <input type="number" class="note-input-lg" id="note-${p.id}"
+              min="0" max="10" step="0.5"
+              value="${saved !== null ? saved : ''}"
+              placeholder="0 – 10"
+              oninput="APP.setRatingInput(${p.id}, this.value)" />
+          </div>
+        </div>`;
+      }).join('')}
+    </div>`;
   },
 
   setRating(playerId, value) {
@@ -544,8 +544,7 @@ Object.assign(APP, {
     const away     = fixture.awayTeam?.name || '';
     const date     = API.formatDate(fixture.startTimestamp);
 
-    const playersToScore = participated.length > 0 ? participated
-      : this.squad.map(p => ({ id: p.id, name: p.name, played: true }));
+    const playersToScore = participated.length > 0 ? participated : [];
 
     let saved = 0;
     for (const p of playersToScore) {
