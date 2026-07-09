@@ -95,33 +95,75 @@ const APP = {
       const res = await SHEETS.request('getNotasPermanentes', { year });
       if (res?.ok) mainScores = res.scores || {};
     } else {
-      // Fallback: localStorage por ano
       const key = `js_notaperm_${year}`;
       const local = JSON.parse(localStorage.getItem(key) || '{}');
       Object.entries(local).forEach(([pid, nota]) => {
         mainScores[pid] = { avg: nota, votes: 1 };
       });
     }
-    this._renderPlayers(squad, mainScores, 'all');
+
+    this._mainScores = mainScores;
+    this._currentPosFilter  = 'all';
+    this._currentSortFilter = 'nota';
+
+    this._renderPlayers(squad, mainScores, 'all', 'nota');
+
+    // Filtros de posição
     document.querySelectorAll('.filters .filter-btn[data-pos]').forEach(btn => {
       btn.addEventListener('click', () => {
         document.querySelectorAll('.filters .filter-btn[data-pos]').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
-        this._renderPlayers(squad, mainScores, btn.dataset.pos);
+        this._currentPosFilter = btn.dataset.pos;
+        this._renderPlayers(squad, mainScores, this._currentPosFilter, this._currentSortFilter);
+      });
+    });
+
+    // Filtros de ordenação
+    document.querySelectorAll('.filters .filter-btn[data-sort]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.filters .filter-btn[data-sort]').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        this._currentSortFilter = btn.dataset.sort;
+        this._renderPlayers(squad, mainScores, this._currentPosFilter, this._currentSortFilter);
       });
     });
   },
 
-  _renderPlayers(squad, mainScores, posFilter) {
+  _renderPlayers(squad, mainScores, posFilter, sortBy = 'nota') {
     const grid = document.getElementById('playersGrid');
     grid.className = 'players-grid-fifa';
-    let players = posFilter === 'all' ? squad : squad.filter(p => p.position === posFilter);
+
+    let players = posFilter === 'all' ? [...squad] : squad.filter(p => p.position === posFilter);
+
     if (!players.length) {
       grid.innerHTML = '<div class="empty-state"><i class="fas fa-search"></i>Nenhum jogador encontrado.</div>';
       return;
     }
 
     const year = new Date().getFullYear();
+    const posOrder = { Goalkeeper: 0, Defender: 1, Midfielder: 2, Attacker: 3 };
+
+    if (sortBy === 'nota') {
+      // Ordena por nota descendente, sem nota no final
+      players.sort((a, b) => {
+        const aData = mainScores[a.id];
+        const bData = mainScores[b.id];
+        const aAvg  = aData ? parseFloat(typeof aData === 'object' ? aData.avg : aData) : null;
+        const bAvg  = bData ? parseFloat(typeof bData === 'object' ? bData.avg : bData) : null;
+        if (aAvg === null && bAvg === null) return 0;
+        if (aAvg === null) return 1;
+        if (bAvg === null) return -1;
+        return bAvg - aAvg;
+      });
+    } else {
+      // Ordena por posição (GOL → DEF → MEI → ATA) e depois nome
+      players.sort((a, b) => {
+        const pa = posOrder[a.position] ?? 9;
+        const pb = posOrder[b.position] ?? 9;
+        if (pa !== pb) return pa - pb;
+        return a.name.localeCompare(b.name);
+      });
+    }
 
     grid.innerHTML = players.map(p => {
       const scoreData = mainScores[p.id];
@@ -135,13 +177,9 @@ const APP = {
       else if (avg >= 7)  rarity = 'rarity-gold';
       else if (avg >= 6)  rarity = 'rarity-silver';
 
-      const rating = avg !== null ? Math.round(avg * 10) : '?';
-      const photo  = p.photo || getPlayerPhoto(p.name) || '';
+      const rating   = avg !== null ? (avg * 10).toFixed(0) : '?';
+      const photo    = p.photo || getPlayerPhoto(p.name) || '';
       const posShort = { Goalkeeper: 'GOL', Defender: 'DEF', Midfielder: 'MEI', Attacker: 'ATA' }[p.position] || p.position || '—';
-
-      // Stats fictícios baseados na nota (para visual)
-      const base = avg ? Math.round(avg * 10) : 65;
-      const stats = this._generateStats(p.position, base);
 
       return `
       <div class="fifa-card" onclick="APP.openPlayerDetail('${p.id}')">
@@ -149,14 +187,11 @@ const APP = {
           <div class="fifa-card-bg-pattern"></div>
           <div class="fifa-card-vignette"></div>
 
-          <!-- Header: rating + pos + bandeira -->
           <div class="fifa-card-header">
             <div class="fifa-card-rating">${rating}</div>
             <div class="fifa-card-pos-label">${posShort}</div>
-            <div class="fifa-card-flag">🇧🇷</div>
           </div>
 
-          <!-- Foto -->
           <div class="fifa-card-photo-wrap">
             ${photo
               ? `<img class="fifa-card-photo" src="${photo}" alt="${p.name}" onerror="this.style.display='none'" />`
@@ -164,16 +199,10 @@ const APP = {
             }
           </div>
 
-          <!-- Divisória -->
           <hr class="fifa-card-hr" />
-
-          <!-- Nome -->
           <div class="fifa-card-name">${p.name}</div>
-
-          <!-- Divisória -->
           <hr class="fifa-card-hr" />
 
-          <!-- Stats: Nota Permanente + Nota Média -->
           <div class="fifa-card-stats">
             <span class="fifa-stat-label-perm">Nota ${year}</span>
             <span class="fifa-stat-val-perm">${avg !== null ? avg.toFixed(1) : '—'}</span>
@@ -181,7 +210,6 @@ const APP = {
             <span class="fifa-stat-val-perm">${votes || '—'}</span>
           </div>
 
-          <!-- Divisória -->
           <hr class="fifa-card-hr" />
         </div>
       </div>`;

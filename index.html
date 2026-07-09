@@ -44,12 +44,22 @@
       <div class="container">
         <div class="section-header">
           <h2>Elenco do Cruzeiro</h2>
-          <div class="filters">
-            <button class="filter-btn active" data-pos="all">Todos</button>
-            <button class="filter-btn" data-pos="Goalkeeper">Goleiros</button>
-            <button class="filter-btn" data-pos="Defender">Defensores</button>
-            <button class="filter-btn" data-pos="Midfielder">Meio-campistas</button>
-            <button class="filter-btn" data-pos="Attacker">Atacantes</button>
+          <div style="display:flex;gap:0.75rem;flex-wrap:wrap;align-items:center">
+            <div class="filters">
+              <button class="filter-btn active" data-pos="all">Todos</button>
+              <button class="filter-btn" data-pos="Goalkeeper">Goleiros</button>
+              <button class="filter-btn" data-pos="Defender">Defensores</button>
+              <button class="filter-btn" data-pos="Midfielder">Meio-campistas</button>
+              <button class="filter-btn" data-pos="Attacker">Atacantes</button>
+            </div>
+            <div class="filters">
+              <button class="filter-btn active" data-sort="nota" id="sortNota">
+                <i class="fas fa-sort-amount-down"></i> Por nota
+              </button>
+              <button class="filter-btn" data-sort="pos" id="sortPos">
+                <i class="fas fa-layer-group"></i> Por posição
+              </button>
+            </div>
           </div>
         </div>
         <div class="players-grid" id="playersGrid">
