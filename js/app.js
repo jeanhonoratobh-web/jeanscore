@@ -460,8 +460,10 @@ Object.assign(APP, {
   },
 
   irParaAvaliar(fixtureId) {
-    document.getElementById('modalJogoDetalhe').classList.remove('open');
-    // Passa os jogadores já carregados do detalhe diretamente
+    // Fecha modal de detalhe se estiver aberto
+    document.getElementById('modalJogoDetalhe')?.classList.remove('open');
+
+    // Busca os jogadores da escalação usando o squad já carregado
     const escalacoes = JSON.parse(localStorage.getItem('js_escalacoes') || '{}');
     const playerIds  = escalacoes[String(fixtureId)] || [];
     const participated = playerIds.map(id => {
@@ -469,11 +471,16 @@ Object.assign(APP, {
       return p ? { id: p.id, name: p.name, pos: p.position, played: true, starter: true } : null;
     }).filter(Boolean);
 
-    // Se squad carregado, usa diretamente. Senão, abre normalmente
     if (participated.length > 0) {
       this._openRatingWithPlayers(fixtureId, participated);
+    } else if (this.squad.length === 0) {
+      // Squad ainda não carregou — espera e tenta de novo
+      API.getSquad().then(squad => {
+        this.squad = squad;
+        this.irParaAvaliar(fixtureId);
+      });
     } else {
-      this.openRatingModal(fixtureId);
+      showToast('Nenhum jogador na escalação. Configure no Admin → Jogos.', 'error');
     }
   },
 
@@ -677,7 +684,7 @@ Object.assign(APP, {
         </div>
         <div class="jogo-date">${API.formatDate(f.startTimestamp)}</div>
         <div class="jogo-actions">
-          <button class="btn btn-sm btn-primary" onclick="APP.openRatingModal('${f.id}')">
+          <button class="btn btn-sm btn-primary" onclick="APP.irParaAvaliar('${f.id}')">
             ${rated ? '✏️ Editar notas' : '⭐ Dar notas'}</button>
         </div>
       </div>`;
