@@ -127,7 +127,7 @@
         <div class="admin-tabs">
           <button class="tab-btn active" data-admin-tab="pendentes">Cadastros Pendentes</button>
           <button class="tab-btn" data-admin-tab="usuarios">Usuários</button>
-          <button class="tab-btn" data-admin-tab="jogos">Cadastrar Jogo</button>
+          <button class="tab-btn" data-admin-tab="jogos">Jogos</button>
         </div>
         <div id="adminContent" class="admin-content">
           <div id="admin-pendentes">
@@ -141,9 +141,10 @@
           </div>
           <div id="admin-jogos">
             <div class="admin-jogos-wrap">
-              <!-- Formulário de cadastro -->
+
+              <!-- ── FORMULÁRIO CADASTRO DE JOGO ── -->
               <div class="admin-jogo-form card-dark">
-                <h3>Novo Jogo / Editar Jogo</h3>
+                <h3><i class="fas fa-plus-circle"></i> Cadastrar / Editar Jogo</h3>
                 <input type="hidden" id="jogoEditId" value="" />
                 <div class="form-row">
                   <div class="form-group">
@@ -194,28 +195,37 @@
                     <i class="fas fa-save"></i> Salvar Jogo
                   </button>
                   <button class="btn btn-outline" id="btnLimparJogo">
-                    <i class="fas fa-times"></i> Limpar
+                    <i class="fas fa-times"></i> Novo
                   </button>
                 </div>
               </div>
 
-              <!-- Escalação -->
-              <div class="admin-escalacao card-dark" id="adminEscalacaoWrap" style="display:none">
-                <h3>Escalação do Jogo: <span id="adminEscalacaoTitle"></span></h3>
-                <p class="info-text" style="padding:0;margin-bottom:1rem">Selecione os jogadores que participaram</p>
+              <!-- ── ESCALAÇÃO ── -->
+              <div class="card-dark" id="adminEscalacaoWrap" style="display:none">
+                <h3><i class="fas fa-users"></i> Escalação: <span id="adminEscalacaoTitle"></span></h3>
+                <p style="color:var(--gray-400);font-size:0.82rem;margin-bottom:1rem">
+                  Clique nos jogadores que <strong style="color:var(--gold)">participaram</strong> da partida
+                </p>
                 <div id="adminEscalacaoGrid" class="escalacao-grid"></div>
-                <div style="margin-top:1rem">
+                <div style="margin-top:1rem;display:flex;gap:0.75rem;flex-wrap:wrap">
                   <button class="btn btn-primary" id="btnSalvarEscalacao">
-                    <i class="fas fa-users"></i> Salvar Escalação
+                    <i class="fas fa-check"></i> Salvar Escalação
+                  </button>
+                  <button class="btn btn-outline" onclick="APP._selecionarTodos()">
+                    Selecionar Todos
+                  </button>
+                  <button class="btn btn-outline" onclick="APP._deselecionarTodos()">
+                    Limpar Seleção
                   </button>
                 </div>
               </div>
 
-              <!-- Lista de jogos manuais -->
+              <!-- ── LISTA DE JOGOS COM CONTROLES ── -->
               <div class="card-dark" style="margin-top:1.5rem">
-                <h3>Jogos Cadastrados Manualmente</h3>
-                <div id="adminJogosList" class="jogos-list" style="margin-top:1rem"></div>
+                <h3><i class="fas fa-list"></i> Jogos Cadastrados</h3>
+                <div id="adminJogosList" class="admin-jogos-list" style="margin-top:1rem"></div>
               </div>
+
             </div>
           </div>
         </div>

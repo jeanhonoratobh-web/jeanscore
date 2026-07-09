@@ -1,17 +1,17 @@
 // =============================================
-// JEANSCORE – INTEGRAÇÃO APIs
-// Elenco:           API-Football
-// Jogos/Escalações: SofaScore (API interna)
+// JEANSCORE – API
+// Elenco: API-Football (via Apps Script proxy)
+// Jogos:  cadastro manual pelo Admin
 // =============================================
 
 const API = {
 
   // ─────────────────────────────────────────
-  // API-FOOTBALL (elenco)
+  // API-FOOTBALL (elenco via proxy)
   // ─────────────────────────────────────────
   async _footballRequest(endpoint, params = {}) {
     const query = new URLSearchParams(params).toString();
-    const url = `${CONFIG.API_BASE}${endpoint}?${query}`;
+    const url   = `${CONFIG.API_BASE}${endpoint}?${query}`;
     const cached = cacheGet(url);
     if (cached) return cached;
     try {
@@ -22,14 +22,14 @@ const API = {
       const data = await res.json();
       cacheSet(url, data);
       return data;
-    } catch (err) {
-      console.error('Erro API-Football:', err);
+    } catch(e) {
+      console.error('Erro API-Football:', e);
       return null;
     }
   },
 
   async getSquad() {
-    // Elenco via Apps Script proxy (tenta SofaScore, fallback API-Football)
+    // Tenta via Apps Script proxy (que busca da planilha Elenco)
     if (isSheetsConfigured()) {
       try {
         const res = await fetch(CONFIG.SHEETS_API_URL, {
@@ -43,181 +43,52 @@ const API = {
         console.warn('Proxy squad falhou:', e);
       }
     }
-    // Fallback direto: API-Football (funciona no browser)
+    // Fallback direto: API-Football
     const data = await this._footballRequest('/players/squads', { team: CONFIG.CRUZEIRO_ID });
     if (!data?.response?.length) return [];
-    // Mapeia para o mesmo formato e usa foto do SofaScore pelo nome
     return data.response[0].players.map(p => ({
       ...p,
-      photo: `https://media.api-sports.io/football/players/${p.id}.png`,
+      photo: p.photo || `https://media.api-sports.io/football/players/${p.id}.png`,
     })) || [];
   },
 
   // ─────────────────────────────────────────
-  // SOFASCORE (jogos, escalações, eventos)
+  // JOGOS MANUAIS (localStorage + Sheets)
   // ─────────────────────────────────────────
-  SOFA_BASE: 'https://api.sofascore.com/api/v1',
-  SOFA_HEADERS: {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-    'Accept': 'application/json',
-    'Referer': 'https://www.sofascore.com/',
+
+  getAllFixtures() {
+    const jogos = this._getManualJogos();
+    return jogos.map(j => this._jogoToFixture(j));
   },
 
-  async _sofaRequest(path) {
-    const url = `${this.SOFA_BASE}${path}`;
-    const cached = cacheGet(url);
-    if (cached) return cached;
-    try {
-      const res = await fetch(url, { headers: this.SOFA_HEADERS });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      cacheSet(url, data);
-      return data;
-    } catch (err) {
-      console.error('Erro SofaScore:', err);
-      return null;
-    }
+  _getManualJogos() {
+    try { return JSON.parse(localStorage.getItem('js_manualJogos') || '[]'); }
+    catch { return []; }
   },
 
-  // ─────────────────────────────────────────
-  // ESPN API (jogos — pública, sem chave, CORS OK)
-  // ─────────────────────────────────────────
-  ESPN_BASE: 'https://site.api.espn.com/apis/site/v2/sports/soccer',
-  ESPN_CRUZEIRO_ID: '2022',
-
-  // Competições ESPN → IDs locais
-  ESPN_LEAGUE_MAP: {
-    'bra.1':  { id: 71,  name: 'Série A',        short: 'Série A',  flag: '🇧🇷' },
-    'bra.2':  { id: 73,  name: 'Copa do Brasil',  short: 'Copa BR',  flag: '🇧🇷' },
-    'conmebol.libertadores': { id: 13, name: 'Libertadores', short: 'Libertad', flag: '🌎' },
-    'bra.mineiro': { id: 629, name: 'Mineiro', short: 'Mineiro', flag: '🇧🇷' },
+  _jogoToFixture(j) {
+    const leagueInfo = CONFIG.COMPETITIONS[j.leagueId] || {};
+    return {
+      id:            j.id,
+      homeTeam:      { name: j.home, id: null, logo: '' },
+      awayTeam:      { name: j.away, id: null, logo: '' },
+      homeScore:     { current: j.homeScore ?? null },
+      awayScore:     { current: j.awayScore ?? null },
+      status:        { type: j.status || 'notstarted' },
+      startTimestamp: j.timestamp,
+      tournament:    { name: leagueInfo.name || j.leagueName || '', id: j.leagueId },
+      _leagueId:     j.leagueId,
+      _manual:       true,
+      _liberado:     j.liberado || false,
+    };
   },
 
-  ESPN_LEAGUES: ['bra.1', 'conmebol.libertadores', 'bra.2'],
-
-  async _espnRequest(path) {
-    const url = `${this.ESPN_BASE}${path}`;
-    const cached = cacheGet(url);
-    if (cached) return cached;
-    try {
-      const res = await fetch(url);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      cacheSet(url, data);
-      return data;
-    } catch(e) {
-      console.error('Erro ESPN:', e);
-      return null;
-    }
-  },
-
-  async getAllFixtures() {
-    const results = await Promise.all(
-      this.ESPN_LEAGUES.map(league =>
-        this._espnRequest(`/${league}/teams/${this.ESPN_CRUZEIRO_ID}/schedule?season=2026`)
-      )
-    );
-
-    const all = [];
-    const seen = new Set();
-    results.forEach((data, i) => {
-      const league = this.ESPN_LEAGUES[i];
-      const leagueInfo = this.ESPN_LEAGUE_MAP[league] || {};
-      if (!data?.events) return;
-
-      data.events.forEach(ev => {
-        if (seen.has(ev.id)) return;
-        seen.add(ev.id);
-
-        const comp = ev.competitions?.[0];
-        if (!comp) return;
-
-        const cruzeiro = comp.competitors?.find(c =>
-          c.team?.id === this.ESPN_CRUZEIRO_ID ||
-          (c.team?.displayName || '').toLowerCase().includes('cruzeiro')
-        );
-        const opponent = comp.competitors?.find(c => c !== cruzeiro);
-
-        const isHome = cruzeiro?.homeAway === 'home';
-        const homeTeam = isHome ? cruzeiro : opponent;
-        const awayTeam = isHome ? opponent : cruzeiro;
-
-        const startTs = Math.floor(new Date(ev.date).getTime() / 1000);
-        // Placar pode vir como objeto {value, displayValue} ou string direto
-        const extractScore = (competitor) => {
-          const s = competitor?.score;
-          if (s === null || s === undefined) return null;
-          if (typeof s === 'object') return s.displayValue ?? s.value ?? null;
-          return s;
-        };
-        const hScore = extractScore(homeTeam);
-        const aScore = extractScore(awayTeam);
-
-        all.push({
-          id:         ev.id,
-          homeTeam:   { name: homeTeam?.team?.displayName || '?', id: homeTeam?.team?.id, logo: homeTeam?.team?.logo },
-          awayTeam:   { name: awayTeam?.team?.displayName || '?', id: awayTeam?.team?.id, logo: awayTeam?.team?.logo },
-          homeScore:  { current: hScore },
-          awayScore:  { current: aScore },
-          status:     { type: this._espnStatusToSofa(ev.status?.type?.name, startTs, hScore, aScore) },
-          startTimestamp: startTs,
-          tournament: { name: leagueInfo.name || league, id: leagueInfo.id },
-          _leagueId:  leagueInfo.id,
-        });
-      });
-    });
-
-    // Adiciona jogos manuais (localStorage)
-    try {
-      const manual = JSON.parse(localStorage.getItem('js_manualJogos') || '[]');
-      manual.forEach(j => {
-        if (seen.has(j.id)) return;
-        seen.add(j.id);
-        const leagueInfo = CONFIG.COMPETITIONS[j.leagueId] || {};
-        all.push({
-          id:          j.id,
-          homeTeam:    { name: j.home, id: null, logo: '' },
-          awayTeam:    { name: j.away, id: null, logo: '' },
-          homeScore:   { current: j.homeScore },
-          awayScore:   { current: j.awayScore },
-          status:      { type: j.status || 'notstarted' },
-          startTimestamp: j.timestamp,
-          tournament:  { name: leagueInfo.name || j.leagueName, id: j.leagueId },
-          _leagueId:   j.leagueId,
-          _manual:     true,
-        });
-      });
-    } catch(e) {}
-
-    return all.sort((a, b) => a.startTimestamp - b.startTimestamp);
-  },
-
-  _espnStatusToSofa(espnStatus, eventDate, homeScore, awayScore) {
-    // Se tem status explícito, usa ele
-    if (espnStatus) {
-      const s = espnStatus.toLowerCase();
-      if (s.includes('final') || s.includes('ft') || s.includes('full') || s.includes('end')) return 'finished';
-      if (s.includes('progress') || s.includes('live') || s.includes('half')) return 'inprogress';
-      if (s.includes('postponed')) return 'postponed';
-    }
-    // Sem status: usa data e placar para inferir
-    const now = Date.now() / 1000;
-    const gameTime = eventDate || 0;
-    // Tem placar → encerrado
-    if (homeScore !== null && homeScore !== '' && awayScore !== null && awayScore !== '') return 'finished';
-    // Data no passado (mais de 2h) → encerrado
-    if (gameTime > 0 && gameTime < now - 7200) return 'finished';
-    // Data no futuro
-    return 'notstarted';
-  },
-
+  // Escalação de um jogo (localStorage)
   async getLineup(fixtureId) {
-    // Primeiro verifica escalação manual (localStorage)
     try {
       const escalacoes = JSON.parse(localStorage.getItem('js_escalacoes') || '{}');
-      const playerIds  = escalacoes[fixtureId];
+      const playerIds  = escalacoes[String(fixtureId)];
       if (playerIds && playerIds.length > 0) {
-        // Busca dados completos do squad
         const squad = window.APP?.squad || [];
         const participated = playerIds.map(id => {
           const p = squad.find(s => String(s.id) === String(id));
@@ -226,78 +97,62 @@ const API = {
         if (participated.length > 0) return { participated, all: participated };
       }
     } catch(e) {}
-
-    // ESPN não tem escalação — usa Apps Script se disponível
-    if (isSheetsConfigured()) {
-      try {
-        const res = await fetch(CONFIG.SHEETS_API_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'text/plain' },
-          body: JSON.stringify({ action: 'getLineup', fixtureId }),
-        });
-        const data = await res.json();
-        if (data.ok && data.participated?.length) {
-          return { participated: data.participated, all: data.all || data.participated };
-        }
-      } catch(e) {}
-    }
-
     return { participated: [], all: [] };
   },
 
-  // Converte torneio SofaScore → ID local
-  getTournamentId(tournamentName) {
-    if (!tournamentName) return null;
-    for (const [name, id] of Object.entries(CONFIG.SOFA_TOURNAMENT_MAP)) {
-      if (tournamentName.toLowerCase().includes(name.toLowerCase())) return id;
-    }
-    return null;
-  },
-
-  // ── HELPERS ──
+  // ─────────────────────────────────────────
+  // HELPERS
+  // ─────────────────────────────────────────
 
   formatStatus(fixture) {
     const type = fixture.status?.type || '';
-    if (type === 'finished')   return { label: 'Encerrado', css: 'status-ft',   done: true,  live: false };
-    if (type === 'notstarted') return { label: 'Agendado',  css: 'status-ns',   done: false, live: false };
-    if (type === 'inprogress') return { label: 'AO VIVO',   css: 'status-live', done: false, live: true  };
-    if (type === 'postponed')  return { label: 'Adiado',    css: 'status-ft',   done: false, live: false };
-    if (type === 'canceled')   return { label: 'Cancelado', css: 'status-ft',   done: false, live: false };
-    return { label: type, css: 'status-ft', done: false, live: false };
+    if (type === 'finished')    return { label: 'Encerrado', css: 'status-ft',   done: true,  live: false };
+    if (type === 'notstarted')  return { label: 'Agendado',  css: 'status-ns',   done: false, live: false };
+    if (type === 'inprogress')  return { label: 'AO VIVO',   css: 'status-live', done: false, live: true  };
+    if (type === 'postponed')   return { label: 'Adiado',    css: 'status-ft',   done: false, live: false };
+    return { label: 'Agendado', css: 'status-ns', done: false, live: false };
   },
 
   getScore(fixture) {
-    const h = fixture.homeScore?.current ?? fixture.homeScore?.display ?? '—';
-    const a = fixture.awayScore?.current ?? fixture.awayScore?.display ?? '—';
-    return { home: h, away: a };
+    const h = fixture.homeScore?.current;
+    const a = fixture.awayScore?.current;
+    return {
+      home: h !== null && h !== undefined ? h : '—',
+      away: a !== null && a !== undefined ? a : '—',
+    };
   },
 
   compName(fixture) {
-    return fixture.tournament?.name || fixture.tournament?.short || 'Outro';
+    const id = fixture._leagueId || fixture.tournament?.id;
+    return CONFIG.COMPETITIONS[id]?.short || fixture.tournament?.name || 'Outro';
   },
 
   compFlag(fixture) {
     const id = fixture._leagueId || fixture.tournament?.id;
-    if (id && CONFIG.COMPETITIONS[id]) return CONFIG.COMPETITIONS[id].flag;
-    return '⚽';
+    return CONFIG.COMPETITIONS[id]?.flag || '⚽';
+  },
+
+  isMonitoredComp(fixture) {
+    if (fixture._manual) return true;
+    const id = fixture._leagueId || fixture.tournament?.id;
+    return !!CONFIG.COMPETITIONS[id];
+  },
+
+  getTournamentId(name) {
+    if (!name) return null;
+    for (const [id, comp] of Object.entries(CONFIG.COMPETITIONS)) {
+      if (name.toLowerCase().includes(comp.name.toLowerCase()) ||
+          name.toLowerCase().includes(comp.short.toLowerCase())) return parseInt(id);
+    }
+    return null;
   },
 
   formatDate(timestamp) {
     if (!timestamp) return '—';
     const d = new Date(timestamp * 1000);
     return d.toLocaleDateString('pt-BR', {
-      day: '2-digit', month: '2-digit',
+      day: '2-digit', month: '2-digit', year: '2-digit',
       hour: '2-digit', minute: '2-digit'
     });
-  },
-
-  isMonitoredComp(fixture) {
-    // Jogos manuais sempre são monitorados
-    if (fixture._manual) return true;
-    // ESPN já popula _leagueId diretamente
-    if (fixture._leagueId) return true;
-    // Fallback: tenta pelo nome
-    const name = fixture.tournament?.name || '';
-    return this.getTournamentId(name) !== null;
   },
 };
