@@ -672,14 +672,32 @@ Object.assign(APP, {
     const gs = SHEETS.local.getGameScores();
     const best = [];
 
+    // Garante que allFixtures está carregado
+    const fixtures = this.allFixtures.length ? this.allFixtures : API.getAllFixtures();
+
     Object.entries(gs).forEach(([fid, players]) => {
-      const fx = this.allFixtures.find(f => String(f.id) === String(fid));
-      const label = fx ? `${fx.homeTeam?.name} × ${fx.awayTeam?.name}` : `Jogo #${fid}`;
+      const fx = fixtures.find(f => String(f.id) === String(fid));
+
+      let label = '';
+      if (fx) {
+        // Descobre o adversário do Cruzeiro
+        const home = fx.homeTeam?.name || '';
+        const away = fx.awayTeam?.name || '';
+        const adversario = home.toLowerCase().includes('cruzeiro') ? away : home;
+        const comp = API.compName(fx);
+        const date = fx.startTimestamp
+          ? new Date(fx.startTimestamp * 1000).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' })
+          : '';
+        label = `${adversario} · ${comp} · ${date}`;
+      } else {
+        label = `Jogo #${fid}`;
+      }
+
       Object.entries(players).forEach(([pid, userScores]) => {
         const vals = Object.values(userScores).map(Number);
         const avg  = (vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(1);
         const name = this._getPlayerName(parseInt(pid));
-        if (name) best.push({ name, avg, match: label });
+        if (name) best.push({ name, avg, match: label, id: pid });
       });
     });
 
