@@ -581,6 +581,9 @@ body {
 }
 .modal-large { max-width: 860px; min-width: min(600px, 95vw); width: 100%; }
 
+/* Modal de avaliação — força largura mínima */
+#modalAvaliarJogo .modal { min-width: min(500px, 95vw); width: 100%; }
+
 .modal-close {
   position: absolute;
   top: 1rem;
@@ -1259,7 +1262,7 @@ body {
   font-weight: 600;
   color: var(--white);
   flex: 1;
-  min-width: 120px;
+  min-width: 300px;
 }
 
 .rating-list-pos {
