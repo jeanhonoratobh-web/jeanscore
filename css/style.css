@@ -1127,3 +1127,96 @@ body {
   font-size: 0.72rem;
   font-weight: 700;
 }
+
+/* ── DETALHE DO JOGO ── */
+.jogo-detalhe-header {
+  display: flex;
+  align-items: center;
+  font-size: 0.85rem;
+  color: var(--gray-400);
+  margin-bottom: 1rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+
+.jogo-detalhe-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-height: 60vh;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.jogo-detalhe-player {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.6rem 0.75rem;
+  border-radius: 8px;
+  background: rgba(255,255,255,0.04);
+  transition: var(--transition);
+}
+.jogo-detalhe-player:hover { background: rgba(255,255,255,0.08); }
+
+.jogo-detalhe-rank {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--gray-400);
+  min-width: 24px;
+  text-align: center;
+}
+
+.jogo-detalhe-photo {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  object-fit: cover;
+  object-position: top;
+  flex-shrink: 0;
+}
+
+.jogo-detalhe-info { flex: 1; min-width: 0; }
+
+.jogo-detalhe-name {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--white);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.jogo-detalhe-pos {
+  font-size: 0.72rem;
+  color: var(--gold);
+  font-weight: 600;
+}
+
+.jogo-detalhe-mynote {
+  font-size: 0.72rem;
+  color: var(--gray-400);
+  margin-top: 1px;
+}
+
+.jogo-detalhe-score { text-align: center; min-width: 56px; }
+
+.jogo-detalhe-avg {
+  display: inline-block;
+  font-size: 1.1rem;
+  font-weight: 800;
+  padding: 0.2rem 0.5rem;
+  border-radius: 6px;
+  font-family: 'Arial Black', sans-serif;
+}
+.jogo-detalhe-avg.no-score {
+  background: rgba(255,255,255,0.08);
+  color: var(--gray-400);
+  font-size: 0.9rem;
+}
+
+.jogo-detalhe-votes {
+  font-size: 0.65rem;
+  color: var(--gray-400);
+  margin-top: 2px;
+}

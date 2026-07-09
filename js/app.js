@@ -300,7 +300,8 @@ Object.assign(APP, {
       const homeLogo = f.homeTeam?.logo || (f.homeTeam?.id ? `https://a.espncdn.com/i/teamlogos/soccer/500/${f.homeTeam.id}.png` : '');
       const awayLogo = f.awayTeam?.logo || (f.awayTeam?.id ? `https://a.espncdn.com/i/teamlogos/soccer/500/${f.awayTeam.id}.png` : '');
 
-      return `<div class="jogo-card" data-fixture="${f.id}">
+      return `<div class="jogo-card" data-fixture="${f.id}" style="cursor:${status.done ? 'pointer' : 'default'}"
+        ${status.done ? `onclick="APP.openJogoDetalhe('${f.id}')"` : ''}>
         <span class="jogo-comp-badge">${API.compFlag(f)} ${API.compName(f)}</span>
         <div class="jogo-teams">
           <div class="jogo-team">
@@ -316,8 +317,8 @@ Object.assign(APP, {
         <div class="jogo-date">${API.formatDate(f.startTimestamp)}</div>
         <span class="jogo-status-badge ${status.css}">${status.live ? '🔴 AO VIVO' : status.label}</span>
         <div class="jogo-actions">
-          ${status.done && AUTH.isLoggedIn()
-            ? `<button class="btn btn-sm btn-primary" onclick="APP.openRatingModal('${f.id}')">
+          ${status.done && AUTH.isLoggedIn() && f._liberado
+            ? `<button class="btn btn-sm btn-primary" onclick="event.stopPropagation();APP.openRatingModal('${f.id}')">
                 ${hasScores ? '✏️ Reeditar' : '⭐ Avaliar'}</button>` : ''}
         </div>
       </div>`;
@@ -331,7 +332,104 @@ Object.assign(APP, {
 
 Object.assign(APP, {
 
-  async openRatingModal(fixtureId) {
+  async openJogoDetalhe(fixtureId) {
+    const fixture = this.allFixtures.find(f => String(f.id) === String(fixtureId));
+    if (!fixture) return;
+
+    const modal   = document.getElementById('modalJogoDetalhe');
+    const title   = document.getElementById('modalJogoDetalheTitle');
+    const content = document.getElementById('modalJogoDetalheContent');
+
+    const sc = API.getScore(fixture);
+    title.innerHTML = `
+      <div style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap">
+        <span>${API.compFlag(fixture)} ${API.compName(fixture)}</span>
+        <span style="font-size:0.9rem;color:var(--gray-400)">${API.formatDate(fixture.startTimestamp)}</span>
+      </div>
+      <div style="font-size:1.3rem;margin-top:0.5rem">
+        ${fixture.homeTeam?.name} <span style="color:var(--gold)">${sc.home} – ${sc.away}</span> ${fixture.awayTeam?.name}
+      </div>`;
+
+    modal.classList.add('open');
+
+    // Busca escalação e notas
+    const escalacoes = JSON.parse(localStorage.getItem('js_escalacoes') || '{}');
+    const playerIds  = escalacoes[String(fixtureId)] || [];
+    const gs         = SHEETS.local.getGameScores();
+    const jogoScores = gs[fixtureId] || {};
+
+    // Monta lista de jogadores com médias
+    const players = playerIds.map(id => {
+      const p = this.squad.find(s => String(s.id) === String(id));
+      if (!p) return null;
+      const userScores = jogoScores[id] ? Object.values(jogoScores[id]).map(Number) : [];
+      const avg  = userScores.length
+        ? (userScores.reduce((a, b) => a + b, 0) / userScores.length).toFixed(1)
+        : null;
+      const myScore = AUTH.isLoggedIn()
+        ? (jogoScores[id]?.[AUTH.getUsername()] ?? null)
+        : null;
+      return { ...p, avg, votes: userScores.length, myScore };
+    }).filter(Boolean);
+
+    if (!players.length) {
+      content.innerHTML = `
+        <p class="info-text">
+          Nenhum jogador cadastrado na escalação deste jogo.
+          ${AUTH.isAdmin() ? '<br><small>Cadastre a escalação no painel Admin.</small>' : ''}
+        </p>`;
+      return;
+    }
+
+    // Ordena por nota média (maiores primeiro, sem nota no final)
+    players.sort((a, b) => {
+      if (a.avg === null && b.avg === null) return 0;
+      if (a.avg === null) return 1;
+      if (b.avg === null) return -1;
+      return parseFloat(b.avg) - parseFloat(a.avg);
+    });
+
+    const liberado = fixture._liberado;
+    const posShort = { Goalkeeper: 'GOL', Defender: 'DEF', Midfielder: 'MEI', Attacker: 'ATA' };
+
+    content.innerHTML = `
+      <div class="jogo-detalhe-header">
+        ${players.length} jogador${players.length !== 1 ? 'es' : ''} na escalação
+        ${liberado && AUTH.isLoggedIn()
+          ? `<button class="btn btn-sm btn-primary" style="margin-left:auto"
+               onclick="document.getElementById('modalJogoDetalhe').classList.remove('open');APP.openRatingModal('${fixtureId}')">
+               ⭐ Dar / Editar notas
+             </button>`
+          : ''}
+      </div>
+      <div class="jogo-detalhe-grid">
+        ${players.map((p, i) => {
+          const photo = p.photo || getPlayerPhoto(p.name) || '';
+          const avgColor = p.avg !== null ? scoreColor(p.avg) : '';
+          const myNote  = p.myScore !== null ? `<div class="jogo-detalhe-mynote">Minha nota: <strong>${p.myScore}</strong></div>` : '';
+          return `
+          <div class="jogo-detalhe-player">
+            <div class="jogo-detalhe-rank">${i + 1}º</div>
+            ${photo
+              ? `<img class="jogo-detalhe-photo" src="${photo}" alt="${p.name}" onerror="this.style.display='none'" />`
+              : `<div class="jogo-detalhe-photo" style="background:var(--blue-mid);display:flex;align-items:center;justify-content:center">
+                   <i class="fas fa-user" style="color:var(--gray-400)"></i></div>`}
+            <div class="jogo-detalhe-info">
+              <div class="jogo-detalhe-name">${p.name}</div>
+              <div class="jogo-detalhe-pos">${posShort[p.position] || p.position || '—'}</div>
+              ${myNote}
+            </div>
+            <div class="jogo-detalhe-score">
+              ${p.avg !== null
+                ? `<span class="jogo-detalhe-avg" style="${avgColor}">${p.avg}</span>
+                   <div class="jogo-detalhe-votes">${p.votes} voto${p.votes !== 1 ? 's' : ''}</div>`
+                : `<span class="jogo-detalhe-avg no-score">—</span>
+                   <div class="jogo-detalhe-votes">sem notas</div>`}
+            </div>
+          </div>`;
+        }).join('')}
+      </div>`;
+  },
     if (!AUTH.isLoggedIn()) { showToast('Você precisa estar logado para avaliar.', 'error'); return; }
     const fixture = this.allFixtures.find(f => String(f.id) === String(fixtureId));
     if (!fixture) {
@@ -776,6 +874,8 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('btnSalvarNotas').addEventListener('click', () => APP.saveGameRatings());
   document.getElementById('closeAvaliarJogo').addEventListener('click', () =>
     document.getElementById('modalAvaliarJogo').classList.remove('open'));
+  document.getElementById('closeJogoDetalhe').addEventListener('click', () =>
+    document.getElementById('modalJogoDetalhe').classList.remove('open'));
   document.getElementById('closeNotaPrincipal').addEventListener('click', () =>
     document.getElementById('modalNotaPrincipal').classList.remove('open'));
 
