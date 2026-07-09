@@ -177,7 +177,7 @@ const APP = {
       else if (avg >= 7)  rarity = 'rarity-gold';
       else if (avg >= 6)  rarity = 'rarity-silver';
 
-      const rating   = avg !== null ? (avg * 10).toFixed(0) : '?';
+      const rating   = avg !== null ? (avg * 10).toFixed(0) : '—';
       const photo    = p.photo || getPlayerPhoto(p.name) || '';
       const posShort = { Goalkeeper: 'GOL', Defender: 'DEF', Midfielder: 'MEI', Attacker: 'ATA' }[p.position] || p.position || '—';
 
@@ -674,15 +674,18 @@ Object.assign(APP, {
     const gs = SHEETS.local.getGameScores();
     const best = [];
 
-    // Garante que allFixtures está carregado
     const fixtures = this.allFixtures.length ? this.allFixtures : API.getAllFixtures();
 
     Object.entries(gs).forEach(([fid, players]) => {
+      // Ignora jogos antigos da ESPN (IDs numéricos longos que não são manuais)
+      const isManual = String(fid).startsWith('manual_') ||
+        fixtures.some(f => String(f.id) === String(fid));
+      if (!isManual) return;
+
       const fx = fixtures.find(f => String(f.id) === String(fid));
 
       let label = '';
       if (fx) {
-        // Descobre o adversário do Cruzeiro
         const home = fx.homeTeam?.name || '';
         const away = fx.awayTeam?.name || '';
         const adversario = home.toLowerCase().includes('cruzeiro') ? away : home;
@@ -692,7 +695,7 @@ Object.assign(APP, {
           : '';
         label = `${adversario} · ${comp} · ${date}`;
       } else {
-        label = `Jogo #${fid}`;
+        return; // pula jogos sem dados
       }
 
       Object.entries(players).forEach(([pid, userScores]) => {
@@ -926,6 +929,20 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('modalJogoDetalhe').classList.remove('open'));
   document.getElementById('closeNotaPrincipal').addEventListener('click', () =>
     document.getElementById('modalNotaPrincipal').classList.remove('open'));
+
+  // Limpa dados antigos da ESPN do localStorage
+  try {
+    const gs = JSON.parse(localStorage.getItem('js_gameScores') || '{}');
+    const manualJogos = JSON.parse(localStorage.getItem('js_manualJogos') || '[]');
+    const manualIds = new Set(manualJogos.map(j => String(j.id)));
+    let changed = false;
+    Object.keys(gs).forEach(fid => {
+      if (!manualIds.has(fid) && !String(fid).startsWith('manual_')) {
+        delete gs[fid]; changed = true;
+      }
+    });
+    if (changed) { localStorage.setItem('js_gameScores', JSON.stringify(gs)); console.log('Dados ESPN antigos limpos do localStorage'); }
+  } catch(e) {}
 
   APP.navigate('elenco');
 
