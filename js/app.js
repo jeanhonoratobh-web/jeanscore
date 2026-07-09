@@ -461,7 +461,64 @@ Object.assign(APP, {
 
   irParaAvaliar(fixtureId) {
     document.getElementById('modalJogoDetalhe').classList.remove('open');
-    this.openRatingModal(fixtureId);
+    // Passa os jogadores já carregados do detalhe diretamente
+    const escalacoes = JSON.parse(localStorage.getItem('js_escalacoes') || '{}');
+    const playerIds  = escalacoes[String(fixtureId)] || [];
+    const participated = playerIds.map(id => {
+      const p = this.squad.find(s => String(s.id) === String(id));
+      return p ? { id: p.id, name: p.name, pos: p.position, played: true, starter: true } : null;
+    }).filter(Boolean);
+
+    // Se squad carregado, usa diretamente. Senão, abre normalmente
+    if (participated.length > 0) {
+      this._openRatingWithPlayers(fixtureId, participated);
+    } else {
+      this.openRatingModal(fixtureId);
+    }
+  },
+
+  async _openRatingWithPlayers(fixtureId, participated) {
+    const fixture = this.allFixtures.find(f => String(f.id) === String(fixtureId));
+    if (!fixture) { showToast('Jogo não encontrado.', 'error'); return; }
+
+    const modal   = document.getElementById('modalAvaliarJogo');
+    const title   = document.getElementById('modalAvaliarTitle');
+    const content = document.getElementById('modalAvaliarContent');
+    const sc      = API.getScore(fixture);
+    title.textContent = `${fixture.homeTeam?.name} ${sc.home} × ${sc.away} ${fixture.awayTeam?.name}`;
+    modal.classList.add('open');
+
+    this.currentFixtureForRating = { fixtureId, fixture, participated, all: participated };
+
+    const username = AUTH.getUsername();
+    const savedScores = {};
+    const gs = SHEETS.local.getGameScores();
+    if (gs[fixtureId]) {
+      Object.entries(gs[fixtureId]).forEach(([pid, userScores]) => {
+        if (userScores[username] !== undefined) savedScores[pid] = userScores[username];
+      });
+    }
+
+    const posShort = { Goalkeeper: 'GOL', Defender: 'DEF', Midfielder: 'MEI', Attacker: 'ATA' };
+    content.innerHTML = `<div class="rating-list">
+      ${participated.map(p => {
+        const saved    = savedScores[p.id] ?? null;
+        const posLabel = posShort[p.pos] || posShort[p.position] || p.pos || '—';
+        return `<div class="rating-list-item ${saved !== null ? 'rated' : ''}" id="apc-${p.id}">
+          <div class="rating-list-info">
+            <span class="rating-list-name">${p.name}</span>
+            <span class="rating-list-pos">${posLabel}</span>
+          </div>
+          <div class="rating-list-input">
+            <input type="number" class="note-input-lg" id="note-${p.id}"
+              min="0" max="10" step="0.5"
+              value="${saved !== null ? saved : ''}"
+              placeholder="0 – 10"
+              oninput="APP.setRatingInput(${p.id}, this.value)" />
+          </div>
+        </div>`;
+      }).join('')}
+    </div>`;
   },
 
   async openRatingModal(fixtureId) {
