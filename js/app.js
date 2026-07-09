@@ -425,7 +425,7 @@ Object.assign(APP, {
         ${players.length} jogador${players.length !== 1 ? 'es' : ''} na escalação
         ${liberado && AUTH.isLoggedIn()
           ? `<button class="btn btn-sm btn-primary" style="margin-left:auto"
-               onclick="document.getElementById('modalJogoDetalhe').classList.remove('open');APP.openRatingModal('${fixtureId}')">
+               onclick="APP.irParaAvaliar('${fixtureId}')">
                ⭐ Dar / Editar notas
              </button>`
           : ''}
@@ -457,6 +457,11 @@ Object.assign(APP, {
           </div>`;
         }).join('')}
       </div>`;
+  },
+
+  irParaAvaliar(fixtureId) {
+    document.getElementById('modalJogoDetalhe').classList.remove('open');
+    this.openRatingModal(fixtureId);
   },
 
   async openRatingModal(fixtureId) {
