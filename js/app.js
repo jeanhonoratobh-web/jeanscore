@@ -146,30 +146,43 @@ const APP = {
       return `
       <div class="fifa-card" onclick="APP.openPlayerDetail('${p.id}')">
         <div class="fifa-card-inner ${rarity}">
-          <div class="fifa-card-top">
-            <div class="fifa-card-left">
-              <div class="fifa-card-rating">${rating}</div>
-              <div class="fifa-card-pos-label">${posShort}</div>
-              <div class="fifa-flag">🇧🇷</div>
-            </div>
-            <div class="fifa-card-photo-wrap">
-              ${photo
-                ? `<img class="fifa-card-photo" src="${photo}" alt="${p.name}" onerror="this.style.display='none'" />`
-                : `<div class="fifa-card-photo-placeholder"><i class="fas fa-user"></i></div>`
-              }
-            </div>
+          <div class="fifa-card-bg-pattern"></div>
+          <div class="fifa-card-vignette"></div>
+
+          <!-- Header: rating + pos + bandeira -->
+          <div class="fifa-card-header">
+            <div class="fifa-card-rating">${rating}</div>
+            <div class="fifa-card-pos-label">${posShort}</div>
+            <div class="fifa-card-flag">🇧🇷</div>
           </div>
-          <div class="fifa-card-divider"></div>
+
+          <!-- Foto -->
+          <div class="fifa-card-photo-wrap">
+            ${photo
+              ? `<img class="fifa-card-photo" src="${photo}" alt="${p.name}" onerror="this.style.display='none'" />`
+              : `<div class="fifa-card-photo-placeholder"><i class="fas fa-user"></i></div>`
+            }
+          </div>
+
+          <!-- Divisória -->
+          <hr class="fifa-card-hr" />
+
+          <!-- Nome -->
           <div class="fifa-card-name">${p.name}</div>
-          <div class="fifa-card-divider"></div>
+
+          <!-- Divisória -->
+          <hr class="fifa-card-hr" />
+
+          <!-- Stats: Nota Permanente + Nota Média -->
           <div class="fifa-card-stats">
-            ${stats.map(s => `
-              <div class="fifa-stat">
-                <span class="fifa-stat-val">${s.val}</span>
-                <span class="fifa-stat-label">${s.label}</span>
-              </div>`).join('')}
+            <span class="fifa-stat-label-perm">Nota ${year}</span>
+            <span class="fifa-stat-val-perm">${avg !== null ? avg.toFixed(1) : '—'}</span>
+            <span class="fifa-stat-label-perm">Votos</span>
+            <span class="fifa-stat-val-perm">${votes || '—'}</span>
           </div>
-          ${votes ? `<div class="fifa-card-score-badge">${votes} voto${votes > 1 ? 's' : ''}</div>` : ''}
+
+          <!-- Divisória -->
+          <hr class="fifa-card-hr" />
         </div>
       </div>`;
     }).join('');
