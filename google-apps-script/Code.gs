@@ -259,19 +259,59 @@ function refreshSofaSquad() {
       number:      p.number || '',
       photo:       p.photo || `https://media.api-sports.io/football/players/${p.id}.png`,
       nationality: p.nationality || '',
+      manual:      false,
     }));
 
-    // Salva na planilha
     const sheet = getSheet('Elenco');
-    sheet.clearContents();
-    sheet.appendRow(['id','name','position','number','photo','nationality','updatedAt']);
-    const now = new Date().toISOString();
-    players.forEach(p => sheet.appendRow([p.id, p.name, p.position, p.number, p.photo, p.nationality, now]));
+    const existing = sheet.getDataRange().getValues();
 
-    return { ok: true, players };
+    // Preserva jogadores marcados como manuais (coluna 7 = 'manual')
+    const manualPlayers = [];
+    if (existing.length > 1) {
+      const [headers, ...rows] = existing;
+      rows.forEach(r => {
+        if (r[6] === true || r[6] === 'TRUE' || r[6] === 'true') {
+          manualPlayers.push({
+            id: r[0], name: r[1], position: r[2],
+            number: r[3], photo: r[4], nationality: r[5], manual: true
+          });
+        }
+      });
+    }
+
+    // Combina: API-Football + manuais que não estejam duplicados
+    const apiIds = new Set(players.map(p => String(p.id)));
+    const toKeep = manualPlayers.filter(m => !apiIds.has(String(m.id)));
+    const allPlayers = [...players, ...toKeep];
+
+    // Reescreve a aba
+    sheet.clearContents();
+    sheet.appendRow(['id','name','position','number','photo','nationality','updatedAt','manual']);
+    const now = new Date().toISOString();
+    allPlayers.forEach(p => sheet.appendRow([
+      p.id, p.name, p.position, p.number, p.photo, p.nationality, now, p.manual || false
+    ]));
+
+    return { ok: true, players: allPlayers };
   } catch(e) {
     return { ok: false, error: e.message };
   }
+}
+
+function addPlayerToSquad({ id, name, position, number, photo, nationality }) {
+  const sheet = getSheet('Elenco');
+  const data  = sheet.getDataRange().getValues();
+
+  // Verifica se já existe
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][0]) === String(id)) {
+      return { ok: false, error: 'Jogador já existe' };
+    }
+  }
+
+  const now = new Date().toISOString();
+  sheet.appendRow([id, name, position || '', number || '', photo || '', nationality || '', now, true]);
+  return { ok: true };
 }
 
 // Trigger diário — configure em: Gatilhos > Adicionar gatilho > refreshSofaSquad > Diário
