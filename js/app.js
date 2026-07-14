@@ -1042,10 +1042,113 @@ Object.assign(APP, {
   _currentAdminJogoId: null,
 
   loadAdminJogos() {
-    document.getElementById('btnSalvarJogo').onclick    = () => this._salvarJogo();
-    document.getElementById('btnLimparJogo').onclick    = () => this._limparJogoForm();
+    this._adminJogosFilter = 'passados';
     document.getElementById('btnSalvarEscalacao').onclick = () => this._salvarEscalacao();
+    document.getElementById('btnFecharEscalacao').onclick = () => {
+      document.getElementById('adminEscalacaoWrap').style.display = 'none';
+    };
+    document.getElementById('btnRecarregarJogos').onclick = () => this._loadAdminJogosList();
+
+    document.querySelectorAll('.filter-btn[data-admin-comp]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.filter-btn[data-admin-comp]').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        this._adminJogosFilter = btn.dataset.adminComp;
+        this._renderAdminJogosList();
+      });
+    });
+
     this._loadAdminJogosList();
+  },
+
+  async _loadAdminJogosList() {
+    const el = document.getElementById('adminJogosList');
+    el.innerHTML = '<div class="loading-spinner"><i class="fas fa-futbol fa-spin"></i> Carregando jogos...</div>';
+
+    let fixtures = [];
+    if (isSheetsConfigured()) {
+      try {
+        const res = await SHEETS.request('getFixtures');
+        if (res?.ok && res.jogos?.length) {
+          fixtures = res.jogos;
+        }
+      } catch(e) { console.warn(e); }
+    }
+    if (!fixtures.length) fixtures = this._getManualJogos();
+
+    this._adminJogosAll = fixtures;
+    this._renderAdminJogosList();
+  },
+
+  _renderAdminJogosList() {
+    const el   = document.getElementById('adminJogosList');
+    const now  = Date.now() / 1000;
+    let jogos  = [...(this._adminJogosAll || [])];
+    const filter = this._adminJogosFilter || 'passados';
+
+    if (filter === 'passados') {
+      jogos = jogos.filter(j => j.status === 'finished' || (j.timestamp > 0 && j.timestamp < now - 7200));
+      jogos.sort((a, b) => b.timestamp - a.timestamp);
+    } else if (filter === 'futuros') {
+      jogos = jogos.filter(j => j.status !== 'finished' && !(j.timestamp > 0 && j.timestamp < now - 7200));
+      jogos.sort((a, b) => a.timestamp - b.timestamp);
+    } else {
+      jogos.sort((a, b) => b.timestamp - a.timestamp);
+    }
+
+    if (!jogos.length) { el.innerHTML = '<p class="info-text">Nenhum jogo encontrado.</p>'; return; }
+
+    const escalacoes = this._getEscalacoes();
+
+    el.innerHTML = jogos.map(j => {
+      const compId  = API._compNameToId(j.comp || '');
+      const comp    = CONFIG.COMPETITIONS[compId] || {};
+      const placar  = (j.homeScore !== null && j.homeScore !== '' && j.awayScore !== null && j.awayScore !== '')
+        ? `${j.homeScore} – ${j.awayScore}` : 'vs';
+      const isLib   = j.liberado === true || j.liberado === 'TRUE';
+      const isFin   = j.status === 'finished' || (j.timestamp > 0 && j.timestamp < now - 7200);
+      const numJog  = (escalacoes[j.id] || []).length;
+      const dateStr = j.timestamp > 0
+        ? new Date(j.timestamp * 1000).toLocaleDateString('pt-BR', { day:'2-digit', month:'2-digit', year:'2-digit', hour:'2-digit', minute:'2-digit' })
+        : '—';
+
+      return `
+      <div class="admin-jogo-item">
+        <div class="admin-jogo-info">
+          <div class="admin-jogo-header">
+            <span class="jogo-comp-badge" style="font-size:0.7rem">${comp.flag || '⚽'} ${comp.short || j.comp || '—'}</span>
+            <span class="${isLib ? 'badge-lib-on' : 'badge-lib-off'}">${isLib ? '🟢 Liberado' : '🔒 Bloqueado'}</span>
+            ${numJog > 0 ? `<span style="color:var(--gold);font-size:0.72rem;margin-left:0.25rem"><i class="fas fa-users"></i> ${numJog}</span>` : ''}
+          </div>
+          <div class="admin-jogo-times">${j.home} <strong>${placar}</strong> ${j.away}</div>
+          <div class="admin-jogo-meta">${dateStr}${j.stadium ? ' · ' + j.stadium : ''}</div>
+        </div>
+        <div class="admin-jogo-actions">
+          ${isFin
+            ? `<button class="btn btn-sm ${isLib ? 'btn-danger' : 'btn-success'}"
+                onclick="APP._toggleLiberacaoSheets('${j.id}', ${isLib})">
+                ${isLib ? '🔒 Bloquear' : '🟢 Liberar'}</button>` : ''}
+          <button class="btn btn-sm btn-outline" onclick="APP._mostrarEscalacao('${j.id}', '${j.home.replace(/'/g,"\\'")}', '${j.away.replace(/'/g,"\\'")}')">
+            <i class="fas fa-users"></i>
+          </button>
+        </div>
+      </div>`;
+    }).join('');
+  },
+
+  async _toggleLiberacaoSheets(jogoId, isCurrentlyLiberated) {
+    const novo = !isCurrentlyLiberated;
+    if (isSheetsConfigured()) {
+      await SHEETS.request('updateJogoLiberado', { jogoId, liberado: novo });
+    }
+    if (this._adminJogosAll) {
+      const j = this._adminJogosAll.find(x => x.id === jogoId);
+      if (j) j.liberado = novo;
+    }
+    const fx = this.allFixtures.find(f => String(f.id) === String(jogoId));
+    if (fx) fx._liberado = novo;
+    showToast(novo ? '✅ Liberado para votação!' : '🔒 Bloqueado.', 'success');
+    this._renderAdminJogosList();
   },
 
   _limparJogoForm() {
