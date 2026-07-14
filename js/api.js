@@ -57,8 +57,67 @@ const API = {
   // ─────────────────────────────────────────
 
   getAllFixtures() {
-    const jogos = this._getManualJogos();
-    return jogos.map(j => this._jogoToFixture(j));
+    // Prioridade 1: jogos do Sheets (temporada completa)
+    // Prioridade 2: jogos manuais do localStorage
+    const manual = this._getManualJogos();
+    return manual.map(j => this._jogoToFixture(j));
+  },
+
+  async getAllFixturesAsync() {
+    // Busca do Sheets se configurado
+    if (isSheetsConfigured()) {
+      try {
+        const res = await fetch(CONFIG.SHEETS_API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain' },
+          body: JSON.stringify({ action: 'getFixtures' }),
+        });
+        const data = await res.json();
+        if (data.ok && data.jogos?.length) {
+          // Mescla com jogos manuais locais (sobrescreve por ID)
+          const sheetsIds = new Set(data.jogos.map(j => j.id));
+          const manual    = this._getManualJogos().filter(j => !sheetsIds.has(j.id));
+          const all       = [
+            ...data.jogos.map(j => this._sheetsJogoToFixture(j)),
+            ...manual.map(j => this._jogoToFixture(j)),
+          ];
+          return all.sort((a, b) => a.startTimestamp - b.startTimestamp);
+        }
+      } catch(e) {
+        console.warn('Sheets fixtures falhou, usando localStorage:', e);
+      }
+    }
+    return this.getAllFixtures();
+  },
+
+  _sheetsJogoToFixture(j) {
+    const leagueId = this._compNameToId(j.comp);
+    const leagueInfo = CONFIG.COMPETITIONS[leagueId] || {};
+    return {
+      id:           j.id,
+      homeTeam:     { name: j.home, id: null, logo: '' },
+      awayTeam:     { name: j.away, id: null, logo: '' },
+      homeScore:    { current: j.homeScore },
+      awayScore:    { current: j.awayScore },
+      status:       { type: j.status || 'notstarted' },
+      startTimestamp: j.timestamp || 0,
+      tournament:   { name: j.comp || leagueInfo.name || '', id: leagueId },
+      _leagueId:    leagueId,
+      _manual:      true,
+      _liberado:    j.liberado || false,
+      _stadium:     j.stadium || '',
+    };
+  },
+
+  _compNameToId(compName) {
+    if (!compName) return 999;
+    const n = compName.toLowerCase();
+    if (n.includes('mineiro'))        return 629;
+    if (n.includes('brasileiro') || n.includes('série a') || n.includes('serie a')) return 71;
+    if (n.includes('copa do brasil')) return 73;
+    if (n.includes('libertadores'))   return 13;
+    if (n.includes('amistoso'))       return 999;
+    return 999;
   },
 
   _getManualJogos() {

@@ -272,7 +272,7 @@ Object.assign(APP, {
   async loadJogos() {
     const list = document.getElementById('jogosList');
     list.innerHTML = '<div class="loading-spinner"><i class="fas fa-futbol fa-spin"></i> Carregando jogos...</div>';
-    this.allFixtures = await API.getAllFixtures();
+    this.allFixtures = await API.getAllFixturesAsync();
     this._renderJogos('proximos', 'all');
 
     document.querySelectorAll('.jogos-tabs .tab-btn').forEach(btn => {
@@ -654,7 +654,7 @@ Object.assign(APP, {
     const content = document.getElementById('avaliarJogosList');
     content.innerHTML = '<div class="loading-spinner"><i class="fas fa-futbol fa-spin"></i></div>';
     // Sempre recarrega para garantir dados frescos
-    this.allFixtures = await API.getAllFixtures();
+    this.allFixtures = await API.getAllFixturesAsync();
 
     const past = this.allFixtures.filter(f =>
       API.formatStatus(f).done && API.isMonitoredComp(f) && f._liberado

@@ -37,9 +37,10 @@ function doPost(e) {
       addPlayer:       () => addPlayerToSquad(payload),
       removePlayer:    () => removePlayerFromSquad(payload),
       updatePlayer:    () => updatePlayerInSquad(payload),
-      getFixtures:     () => getFixtures(),
-      refreshFixtures: () => refreshFixtures(),
+      getFixtures:     () => getJogosTemporada(),
+      refreshFixtures: () => saveJogosTemporada(),
       getLineup:       () => getLineup(payload),
+      updateJogoLiberado: () => updateJogoLiberado(payload),
       saveNotaPermanente: () => saveNotaPermanente(payload),
       getNotasPermanentes: () => getNotasPermanentes(payload),
     };
@@ -704,4 +705,153 @@ function getNotasPermanentes({ year }) {
   });
 
   return { ok: true, scores };
+}
+
+// =============================================
+// JOGOS OFICIAIS DA TEMPORADA 2026
+// =============================================
+
+function getJogosTemporada() {
+  const sheet = getSheet('Jogos2026');
+  const data  = sheet.getDataRange().getValues();
+  if (data.length <= 1) return { ok: true, jogos: [] };
+
+  const [, ...rows] = data;
+  const jogos = rows.map(r => ({
+    id:        r[0],
+    home:      r[1],
+    away:      r[2],
+    homeScore: r[3] !== '' ? r[3] : null,
+    awayScore: r[4] !== '' ? r[4] : null,
+    date:      r[5],
+    timestamp: r[6],
+    comp:      r[7],
+    stadium:   r[8],
+    status:    r[9],
+    liberado:  r[10] === true || r[10] === 'TRUE',
+  }));
+  return { ok: true, jogos };
+}
+
+function saveJogosTemporada() {
+  const jogos = getCruzeiroJogos2026();
+  const sheet = getSheet('Jogos2026');
+  sheet.clearContents();
+  sheet.appendRow(['id','home','away','homeScore','awayScore','date','timestamp','comp','stadium','status','liberado']);
+  jogos.forEach(j => sheet.appendRow([
+    j.id, j.home, j.away,
+    j.homeScore !== null ? j.homeScore : '',
+    j.awayScore !== null ? j.awayScore : '',
+    j.date, j.timestamp, j.comp, j.stadium, j.status, j.liberado
+  ]));
+  return { ok: true, count: jogos.length };
+}
+
+function updateJogoLiberado({ jogoId, liberado }) {
+  const sheet = getSheet('Jogos2026');
+  const data  = sheet.getDataRange().getValues();
+  for (let i = 1; i < data.length; i++) {
+    if (data[i][0] === jogoId) {
+      sheet.getRange(i + 1, 11).setValue(liberado);
+      return { ok: true };
+    }
+  }
+  return { ok: false, error: 'Jogo não encontrado' };
+}
+
+function getCruzeiroJogos2026() {
+  // Temporada completa 2026 extraída de cruzeiro.com.br em julho/2026
+  const now = Date.now() / 1000;
+  function ts(dateStr) {
+    try { return Math.floor(new Date(dateStr).getTime() / 1000); } catch(e) { return 0; }
+  }
+  function status(t, hs, as) {
+    if (hs === null) return t > 0 && t < now ? 'finished' : 'notstarted';
+    return 'finished';
+  }
+
+  const jogos = [
+    // JANEIRO
+    {id:'j01', home:'Cruzeiro',  away:'Pouso Alegre', homeScore:1, awayScore:2, date:'2026-01-10T22:30', comp:'Campeonato Mineiro',    stadium:'Mineirão'},
+    {id:'j02', home:'Tombense',  away:'Cruzeiro',     homeScore:1, awayScore:2, date:'2026-01-15T01:30', comp:'Campeonato Mineiro',    stadium:'Parque do Sabiá'},
+    {id:'j03', home:'Cruzeiro',  away:'Uberlândia',   homeScore:5, awayScore:0, date:'2026-01-17T22:30', comp:'Campeonato Mineiro',    stadium:'Mineirão'},
+    {id:'j04', home:'Cruzeiro',  away:'Democrata-GV', homeScore:0, awayScore:1, date:'2026-01-22T22:30', comp:'Campeonato Mineiro',    stadium:'Mineirão'},
+    {id:'j05', home:'Atlético-MG', away:'Cruzeiro',   homeScore:2, awayScore:1, date:'2026-01-25T22:00', comp:'Campeonato Mineiro',    stadium:'Arena MRV'},
+    {id:'j06', home:'Botafogo',  away:'Cruzeiro',     homeScore:4, awayScore:0, date:'2026-01-30T01:30', comp:'Campeonato Brasileiro', stadium:'Nilton Santos'},
+    // FEVEREIRO
+    {id:'j07', home:'Betim',     away:'Cruzeiro',     homeScore:0, awayScore:1, date:'2026-02-02T00:00', comp:'Campeonato Mineiro',    stadium:'Arena URBSAN'},
+    {id:'j08', home:'Cruzeiro',  away:'Coritiba',     homeScore:1, awayScore:2, date:'2026-02-06T01:30', comp:'Campeonato Brasileiro', stadium:'Mineirão'},
+    {id:'j09', home:'Cruzeiro',  away:'América-MG',   homeScore:2, awayScore:0, date:'2026-02-08T22:00', comp:'Campeonato Mineiro',    stadium:'Mineirão'},
+    {id:'j10', home:'Mirassol',  away:'Cruzeiro',     homeScore:2, awayScore:2, date:'2026-02-11T23:00', comp:'Campeonato Brasileiro', stadium:'Maião'},
+    {id:'j11', home:'URT',       away:'Cruzeiro',     homeScore:1, awayScore:2, date:'2026-02-14T23:00', comp:'Campeonato Mineiro',    stadium:'Zama Maciel'},
+    {id:'j12', home:'Pouso Alegre', away:'Cruzeiro',  homeScore:1, awayScore:2, date:'2026-02-21T22:30', comp:'Campeonato Mineiro',    stadium:'Manduzão'},
+    {id:'j13', home:'Cruzeiro',  away:'Corinthians',  homeScore:1, awayScore:1, date:'2026-02-26T00:00', comp:'Campeonato Brasileiro', stadium:'Mineirão'},
+    {id:'j14', home:'Cruzeiro',  away:'Pouso Alegre', homeScore:1, awayScore:0, date:'2026-02-28T22:30', comp:'Campeonato Mineiro',    stadium:'Mineirão'},
+    // MARÇO
+    {id:'j15', home:'Cruzeiro',  away:'Atlético-MG',  homeScore:1, awayScore:0, date:'2026-03-08T22:00', comp:'Campeonato Mineiro',    stadium:'Mineirão'},
+    {id:'j16', home:'Flamengo',  away:'Cruzeiro',     homeScore:2, awayScore:0, date:'2026-03-12T01:30', comp:'Campeonato Brasileiro', stadium:'Maracanã'},
+    {id:'j17', home:'Cruzeiro',  away:'Vasco',        homeScore:3, awayScore:3, date:'2026-03-16T00:30', comp:'Campeonato Brasileiro', stadium:'Mineirão'},
+    {id:'j18', home:'Athletico-PR', away:'Cruzeiro',  homeScore:2, awayScore:1, date:'2026-03-18T23:30', comp:'Campeonato Brasileiro', stadium:'Ligga Arena'},
+    {id:'j19', home:'Cruzeiro',  away:'Santos',       homeScore:0, awayScore:0, date:'2026-03-22T20:00', comp:'Campeonato Brasileiro', stadium:'Mineirão'},
+    // ABRIL
+    {id:'j20', home:'Cruzeiro',  away:'Vitória',      homeScore:3, awayScore:0, date:'2026-04-02T01:00', comp:'Campeonato Brasileiro', stadium:'Mineirão'},
+    {id:'j21', home:'São Paulo', away:'Cruzeiro',     homeScore:4, awayScore:1, date:'2026-04-04T23:30', comp:'Campeonato Brasileiro', stadium:'Morumbi'},
+    {id:'j22', home:'Barcelona Guayaquil', away:'Cruzeiro', homeScore:0, awayScore:1, date:'2026-04-08T02:00', comp:'Copa Libertadores', stadium:'Monumental Isidro Romero'},
+    {id:'j23', home:'Cruzeiro',  away:'Red Bull Bragantino', homeScore:2, awayScore:1, date:'2026-04-12T23:30', comp:'Campeonato Brasileiro', stadium:'Mineirão'},
+    {id:'j24', home:'Cruzeiro',  away:'Univ. Católica', homeScore:1, awayScore:2, date:'2026-04-16T00:00', comp:'Copa Libertadores', stadium:'Mineirão'},
+    {id:'j25', home:'Cruzeiro',  away:'Grêmio',       homeScore:2, awayScore:0, date:'2026-04-19T01:30', comp:'Campeonato Brasileiro', stadium:'Mineirão'},
+    {id:'j26', home:'Goiás',     away:'Cruzeiro',     homeScore:2, awayScore:2, date:'2026-04-23T00:00', comp:'Copa do Brasil',       stadium:'Serra Dourada'},
+    {id:'j27', home:'Remo',      away:'Cruzeiro',     homeScore:0, awayScore:1, date:'2026-04-25T23:30', comp:'Campeonato Brasileiro', stadium:'Baenão'},
+    {id:'j28', home:'Cruzeiro',  away:'Boca Juniors', homeScore:1, awayScore:0, date:'2026-04-29T02:30', comp:'Copa Libertadores', stadium:'Mineirão'},
+    // MAIO
+    {id:'j29', home:'Cruzeiro',  away:'Atlético-MG',  homeScore:1, awayScore:3, date:'2026-05-03T02:00', comp:'Campeonato Brasileiro', stadium:'Mineirão'},
+    {id:'j30', home:'Univ. Católica', away:'Cruzeiro', homeScore:0, awayScore:0, date:'2026-05-07T04:00', comp:'Copa Libertadores', stadium:'San Carlos de Apoquindo'},
+    {id:'j31', home:'Bahia',     away:'Cruzeiro',     homeScore:1, awayScore:2, date:'2026-05-10T02:00', comp:'Campeonato Brasileiro', stadium:'Fonte Nova'},
+    {id:'j32', home:'Cruzeiro',  away:'Goiás',        homeScore:1, awayScore:0, date:'2026-05-13T02:30', comp:'Copa do Brasil',       stadium:'Mineirão'},
+    {id:'j33', home:'Palmeiras', away:'Cruzeiro',     homeScore:1, awayScore:1, date:'2026-05-17T02:00', comp:'Campeonato Brasileiro', stadium:'Arena Barueri'},
+    {id:'j34', home:'Boca Juniors', away:'Cruzeiro',  homeScore:1, awayScore:1, date:'2026-05-20T02:30', comp:'Copa Libertadores', stadium:'La Bombonera'},
+    {id:'j35', home:'Cruzeiro',  away:'Chapecoense',  homeScore:2, awayScore:1, date:'2026-05-24T21:00', comp:'Campeonato Brasileiro', stadium:'Mineirão'},
+    {id:'j36', home:'Cruzeiro',  away:'Barcelona Guayaquil', homeScore:4, awayScore:0, date:'2026-05-29T02:30', comp:'Copa Libertadores', stadium:'Mineirão'},
+    // JUNHO
+    {id:'j37', home:'Cruzeiro',  away:'Fluminense',   homeScore:1, awayScore:1, date:'2026-06-01T01:30', comp:'Campeonato Brasileiro', stadium:'Mineirão'},
+    // JULHO
+    {id:'j38', home:'Cruzeiro',  away:'Defensor Sporting', homeScore:2, awayScore:0, date:'2026-07-04T16:00', comp:'Amistoso', stadium:'Independência'},
+    {id:'j39', home:'Cruzeiro',  away:'Grêmio',       homeScore:1, awayScore:3, date:'2026-07-12T22:00', comp:'Amistoso', stadium:'Mané Garrincha'},
+    {id:'j40', home:'Internacional', away:'Cruzeiro', homeScore:null, awayScore:null, date:'2026-07-23T02:30', comp:'Campeonato Brasileiro', stadium:'Beira Rio'},
+    {id:'j41', home:'Cruzeiro',  away:'Botafogo',     homeScore:null, awayScore:null, date:'2026-07-26T21:00', comp:'Campeonato Brasileiro', stadium:'Mineirão'},
+    {id:'j42', home:'Coritiba',  away:'Cruzeiro',     homeScore:null, awayScore:null, date:'2026-07-31T02:30', comp:'Campeonato Brasileiro', stadium:'Couto Pereira'},
+    // AGOSTO
+    {id:'j43', home:'Chapecoense', away:'Cruzeiro',   homeScore:null, awayScore:null, date:'2026-08-02T23:30', comp:'Copa do Brasil', stadium:'Arena Condá'},
+    {id:'j44', home:'Cruzeiro',  away:'Chapecoense',  homeScore:null, awayScore:null, date:'2026-08-06T00:00', comp:'Copa do Brasil', stadium:'Mineirão'},
+    {id:'j45', home:'Cruzeiro',  away:'Mirassol',     homeScore:null, awayScore:null, date:'2026-08-09T16:00', comp:'Campeonato Brasileiro', stadium:'Mineirão'},
+    {id:'j46', home:'Cruzeiro',  away:'Flamengo',     homeScore:null, awayScore:null, date:'2026-08-13T02:30', comp:'Copa Libertadores', stadium:'Mineirão'},
+    {id:'j47', home:'Corinthians', away:'Cruzeiro',   homeScore:null, awayScore:null, date:'2026-08-17T00:30', comp:'Campeonato Brasileiro', stadium:'Neo Química Arena'},
+    {id:'j48', home:'Flamengo',  away:'Cruzeiro',     homeScore:null, awayScore:null, date:'2026-08-20T02:30', comp:'Copa Libertadores', stadium:'Maracanã'},
+    {id:'j49', home:'Cruzeiro',  away:'Flamengo',     homeScore:null, awayScore:null, date:'2026-08-23T01:30', comp:'Campeonato Brasileiro', stadium:'Mineirão'},
+    // SETEMBRO
+    {id:'j50', home:'Vasco',     away:'Cruzeiro',     homeScore:null, awayScore:null, date:'2026-09-01', comp:'Campeonato Brasileiro', stadium:'São Januário'},
+    {id:'j51', home:'Cruzeiro',  away:'Athletico-PR', homeScore:null, awayScore:null, date:'2026-09-01', comp:'Campeonato Brasileiro', stadium:'Mineirão'},
+    {id:'j52', home:'Santos',    away:'Cruzeiro',     homeScore:null, awayScore:null, date:'2026-09-01', comp:'Campeonato Brasileiro', stadium:'Vila Belmiro'},
+    {id:'j53', home:'Vitória',   away:'Cruzeiro',     homeScore:null, awayScore:null, date:'2026-09-01', comp:'Campeonato Brasileiro', stadium:'Barradão'},
+    // OUTUBRO
+    {id:'j54', home:'Cruzeiro',  away:'São Paulo',    homeScore:null, awayScore:null, date:'2026-10-07', comp:'Campeonato Brasileiro', stadium:'Mineirão'},
+    {id:'j55', home:'RB Bragantino', away:'Cruzeiro', homeScore:null, awayScore:null, date:'2026-10-10', comp:'Campeonato Brasileiro', stadium:'Nabi Abi Chedid'},
+    {id:'j56', home:'Grêmio',    away:'Cruzeiro',     homeScore:null, awayScore:null, date:'2026-10-17', comp:'Campeonato Brasileiro', stadium:'Arena do Grêmio'},
+    {id:'j57', home:'Cruzeiro',  away:'Remo',         homeScore:null, awayScore:null, date:'2026-10-24', comp:'Campeonato Brasileiro', stadium:'Mineirão'},
+    {id:'j58', home:'Atlético-MG', away:'Cruzeiro',   homeScore:null, awayScore:null, date:'2026-10-28', comp:'Campeonato Brasileiro', stadium:'Arena MRV'},
+    // NOVEMBRO
+    {id:'j59', home:'Cruzeiro',  away:'Bahia',        homeScore:null, awayScore:null, date:'2026-11-04', comp:'Campeonato Brasileiro', stadium:'Mineirão'},
+    {id:'j60', home:'Cruzeiro',  away:'Palmeiras',    homeScore:null, awayScore:null, date:'2026-11-18', comp:'Campeonato Brasileiro', stadium:'Mineirão'},
+    {id:'j61', home:'Chapecoense', away:'Cruzeiro',   homeScore:null, awayScore:null, date:'2026-11-21', comp:'Campeonato Brasileiro', stadium:'Arena Condá'},
+    {id:'j62', home:'Fluminense', away:'Cruzeiro',    homeScore:null, awayScore:null, date:'2026-11-28', comp:'Campeonato Brasileiro', stadium:'Maracanã'},
+    // DEZEMBRO
+    {id:'j63', home:'Cruzeiro',  away:'Internacional', homeScore:null, awayScore:null, date:'2026-12-02', comp:'Campeonato Brasileiro', stadium:'Mineirão'},
+  ];
+
+  return jogos.map(j => ({
+    ...j,
+    timestamp: ts(j.date),
+    status:    status(ts(j.date), j.homeScore, j.awayScore),
+    liberado:  false,
+  }));
 }
