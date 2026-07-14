@@ -153,7 +153,70 @@
           <div id="admin-jogos">
             <div class="admin-jogos-wrap">
 
-              <!-- ── ESCALAÇÃO (painel deslizante) ── -->
+              <!-- ── FORMULÁRIO CADASTRO MANUAL ── -->
+              <div class="card-dark" id="adminJogoFormWrap">
+                <div style="display:flex;align-items:center;justify-content:space-between;cursor:pointer"
+                     onclick="APP._toggleJogoForm()">
+                  <h3 style="margin:0"><i class="fas fa-plus-circle"></i> Adicionar Jogo Manual</h3>
+                  <i class="fas fa-chevron-down" id="jogoFormChevron"></i>
+                </div>
+                <div id="jogoFormBody" style="display:none;margin-top:1rem">
+                  <input type="hidden" id="jogoEditId" value="" />
+                  <div class="form-row">
+                    <div class="form-group">
+                      <label>Time da Casa</label>
+                      <input type="text" id="jogoHomeTeam" placeholder="Ex: Cruzeiro" />
+                    </div>
+                    <div class="form-group">
+                      <label>Time Visitante</label>
+                      <input type="text" id="jogoAwayTeam" placeholder="Ex: Flamengo" />
+                    </div>
+                  </div>
+                  <div class="form-row">
+                    <div class="form-group">
+                      <label>Data e Hora</label>
+                      <input type="datetime-local" id="jogoDate" />
+                    </div>
+                    <div class="form-group">
+                      <label>Competição</label>
+                      <select id="jogoComp" class="select-dark">
+                        <option value="71">🇧🇷 Série A</option>
+                        <option value="73">🇧🇷 Copa do Brasil</option>
+                        <option value="13">🌎 Libertadores</option>
+                        <option value="629">🇧🇷 Mineiro</option>
+                        <option value="999">🤝 Amistoso</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div class="form-row">
+                    <div class="form-group">
+                      <label>Placar Casa</label>
+                      <input type="number" id="jogoHomeScore" placeholder="—" min="0" />
+                    </div>
+                    <div class="form-group">
+                      <label>Placar Visitante</label>
+                      <input type="number" id="jogoAwayScore" placeholder="—" min="0" />
+                    </div>
+                    <div class="form-group">
+                      <label>Status</label>
+                      <select id="jogoStatus" class="select-dark">
+                        <option value="notstarted">Agendado</option>
+                        <option value="finished">Encerrado</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div class="form-row">
+                    <button class="btn btn-primary" id="btnSalvarJogo">
+                      <i class="fas fa-save"></i> Salvar
+                    </button>
+                    <button class="btn btn-outline" id="btnLimparJogo">
+                      <i class="fas fa-times"></i> Limpar
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- ── ESCALAÇÃO ── -->
               <div class="card-dark" id="adminEscalacaoWrap" style="display:none">
                 <h3><i class="fas fa-users"></i> Escalação: <span id="adminEscalacaoTitle"></span></h3>
                 <p style="color:var(--gray-400);font-size:0.82rem;margin-bottom:1rem">
@@ -164,30 +227,26 @@
                   <button class="btn btn-primary" id="btnSalvarEscalacao">
                     <i class="fas fa-check"></i> Salvar Escalação
                   </button>
-                  <button class="btn btn-outline" onclick="APP._selecionarTodos()">Selecionar Todos</button>
-                  <button class="btn btn-outline" onclick="APP._deselecionarTodos()">Limpar Seleção</button>
+                  <button class="btn btn-outline" onclick="APP._selecionarTodos()">Todos</button>
+                  <button class="btn btn-outline" onclick="APP._deselecionarTodos()">Limpar</button>
                   <button class="btn btn-outline" id="btnFecharEscalacao">
                     <i class="fas fa-times"></i> Fechar
                   </button>
                 </div>
               </div>
 
-              <!-- ── FILTROS ── -->
-              <div class="card-dark">
-                <div style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap">
+              <!-- ── FILTROS + LISTA ── -->
+              <div class="card-dark" style="margin-top:1rem">
+                <div style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap;margin-bottom:1rem">
                   <div class="filters" style="flex:1">
-                    <button class="filter-btn active" data-admin-comp="all">Todos</button>
-                    <button class="filter-btn" data-admin-comp="passados">Passados</button>
+                    <button class="filter-btn active" data-admin-comp="passados">Passados</button>
                     <button class="filter-btn" data-admin-comp="futuros">Futuros</button>
+                    <button class="filter-btn" data-admin-comp="all">Todos</button>
                   </div>
                   <button class="btn btn-outline btn-sm" id="btnRecarregarJogos">
                     <i class="fas fa-sync"></i> Recarregar
                   </button>
                 </div>
-              </div>
-
-              <!-- ── LISTA DE JOGOS ── -->
-              <div class="card-dark" style="margin-top:1rem">
                 <div id="adminJogosList" class="admin-jogos-list"></div>
               </div>
 

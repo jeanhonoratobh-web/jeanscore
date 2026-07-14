@@ -1043,11 +1043,15 @@ Object.assign(APP, {
 
   loadAdminJogos() {
     this._adminJogosFilter = 'passados';
+    this._jogoFormOpen = false;
+
     document.getElementById('btnSalvarEscalacao').onclick = () => this._salvarEscalacao();
     document.getElementById('btnFecharEscalacao').onclick = () => {
       document.getElementById('adminEscalacaoWrap').style.display = 'none';
     };
     document.getElementById('btnRecarregarJogos').onclick = () => this._loadAdminJogosList();
+    document.getElementById('btnSalvarJogo').onclick      = () => this._salvarJogo();
+    document.getElementById('btnLimparJogo').onclick      = () => this._limparJogoForm();
 
     document.querySelectorAll('.filter-btn[data-admin-comp]').forEach(btn => {
       btn.addEventListener('click', () => {
@@ -1061,6 +1065,13 @@ Object.assign(APP, {
     this._loadAdminJogosList();
   },
 
+  _toggleJogoForm() {
+    this._jogoFormOpen = !this._jogoFormOpen;
+    document.getElementById('jogoFormBody').style.display = this._jogoFormOpen ? 'block' : 'none';
+    const chevron = document.getElementById('jogoFormChevron');
+    if (chevron) chevron.style.transform = this._jogoFormOpen ? 'rotate(180deg)' : '';
+  },
+
   async _loadAdminJogosList() {
     const el = document.getElementById('adminJogosList');
     el.innerHTML = '<div class="loading-spinner"><i class="fas fa-futbol fa-spin"></i> Carregando jogos...</div>';
@@ -1069,12 +1080,28 @@ Object.assign(APP, {
     if (isSheetsConfigured()) {
       try {
         const res = await SHEETS.request('getFixtures');
-        if (res?.ok && res.jogos?.length) {
-          fixtures = res.jogos;
-        }
+        if (res?.ok && res.jogos?.length) fixtures = res.jogos;
       } catch(e) { console.warn(e); }
     }
-    if (!fixtures.length) fixtures = this._getManualJogos();
+
+    // Mescla com jogos manuais do localStorage
+    const manuais = this._getManualJogos();
+    const sheetsIds = new Set(fixtures.map(j => String(j.id)));
+    manuais.filter(j => !sheetsIds.has(String(j.id))).forEach(j => {
+      fixtures.push({
+        id: j.id, home: j.home, away: j.away,
+        homeScore: j.homeScore, awayScore: j.awayScore,
+        timestamp: j.timestamp, comp: j.leagueName || CONFIG.COMPETITIONS[j.leagueId]?.name || '',
+        stadium: '', status: j.status, liberado: j.liberado || false,
+      });
+    });
+
+    if (!fixtures.length) fixtures = manuais.map(j => ({
+      id: j.id, home: j.home, away: j.away,
+      homeScore: j.homeScore, awayScore: j.awayScore,
+      timestamp: j.timestamp, comp: j.leagueName || '',
+      stadium: '', status: j.status, liberado: j.liberado || false,
+    }));
 
     this._adminJogosAll = fixtures;
     this._renderAdminJogosList();
@@ -1087,13 +1114,23 @@ Object.assign(APP, {
     const filter = this._adminJogosFilter || 'passados';
 
     if (filter === 'passados') {
-      jogos = jogos.filter(j => j.status === 'finished' || (j.timestamp > 0 && j.timestamp < now - 7200));
-      jogos.sort((a, b) => b.timestamp - a.timestamp);
+      // Tem placar OU data no passado (com mais de 2h)
+      jogos = jogos.filter(j =>
+        (j.homeScore !== null && j.homeScore !== '' && j.homeScore !== undefined) ||
+        (j.status === 'finished') ||
+        (j.timestamp > 0 && j.timestamp < now - 7200)
+      );
+      jogos.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
     } else if (filter === 'futuros') {
-      jogos = jogos.filter(j => j.status !== 'finished' && !(j.timestamp > 0 && j.timestamp < now - 7200));
-      jogos.sort((a, b) => a.timestamp - b.timestamp);
+      // Sem placar E data no futuro OU timestamp = 0
+      jogos = jogos.filter(j =>
+        (j.homeScore === null || j.homeScore === '' || j.homeScore === undefined) &&
+        j.status !== 'finished' &&
+        (j.timestamp === 0 || j.timestamp > now - 7200)
+      );
+      jogos.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
     } else {
-      jogos.sort((a, b) => b.timestamp - a.timestamp);
+      jogos.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
     }
 
     if (!jogos.length) { el.innerHTML = '<p class="info-text">Nenhum jogo encontrado.</p>'; return; }
