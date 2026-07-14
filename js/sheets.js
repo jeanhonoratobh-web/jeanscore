@@ -76,7 +76,27 @@ const SHEETS = {
     return await this.request('getUserGameScores', { fixtureId, username });
   },
 
-  // ── HELPER: calcula média de notas ──
+  // ── Sincroniza notas do Sheets para localStorage ──
+  async syncGameScores() {
+    try {
+      // Busca todas as notas do Sheets (sem filtro de fixtureId)
+      const res = await this.request('getAllGameScores');
+      if (!res.ok || !res.scores) return;
+
+      // Reconstrói o formato do localStorage
+      const gs = {};
+      res.scores.forEach(s => {
+        if (!gs[s.fixtureId]) gs[s.fixtureId] = {};
+        if (!gs[s.fixtureId][s.playerId]) gs[s.fixtureId][s.playerId] = {};
+        gs[s.fixtureId][s.playerId][s.username] = parseFloat(s.score);
+      });
+
+      localStorage.setItem('js_gameScores', JSON.stringify(gs));
+      console.log('Notas sincronizadas do Sheets:', res.scores.length);
+    } catch(e) {
+      console.warn('Sync game scores falhou:', e);
+    }
+  },
   calcAverage(scores) {
     if (!scores || !scores.length) return null;
     const sum = scores.reduce((acc, s) => acc + parseFloat(s.score), 0);

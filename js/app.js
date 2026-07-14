@@ -699,6 +699,8 @@ Object.assign(APP, {
 Object.assign(APP, {
 
   async loadRankings() {
+    // Sincroniza do Sheets antes de renderizar
+    if (isSheetsConfigured()) await SHEETS.syncGameScores();
     this._renderRankingGeral();
     this._renderRankingJogo();
   },
@@ -953,6 +955,14 @@ Object.assign(APP, {
 
 document.addEventListener('DOMContentLoaded', () => {
   AUTH.init();
+
+  // Sincroniza notas do Sheets para localStorage
+  if (isSheetsConfigured()) {
+    SHEETS.syncGameScores().then(() => {
+      // Se já estiver na página de rankings, recarrega
+      if (APP.currentPage === 'rankings') APP.loadRankings();
+    });
+  }
 
   document.querySelectorAll('.nav-link').forEach(link => {
     link.addEventListener('click', e => { e.preventDefault(); APP.navigate(link.dataset.page); });

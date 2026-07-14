@@ -31,6 +31,7 @@ function doPost(e) {
       getGameScores:   () => getGameScores(payload),
       submitGameScore: () => submitGameScore(payload),
       getUserGameScores: () => getUserGameScores(payload),
+      getAllGameScores: () => getAllGameScores(),
       updateUserHash:  () => updateUserHash(payload),
       getSquad:        () => getSofaSquad(),
       refreshSquad:    () => refreshSofaSquad(),
@@ -432,6 +433,23 @@ function setMainScore({ playerId, playerName, score, setBy }) {
 // =============================================
 // NOTAS POR JOGO
 // =============================================
+
+function getAllGameScores() {
+  const sheet = getSheet(SHEETS_NAMES.GAME_SCORES);
+  const data  = sheet.getDataRange().getValues();
+  if (data.length <= 1) return { ok: true, scores: [] };
+
+  const [headers, ...rows] = data;
+  const scores = rows.map(r => ({
+    fixtureId:  String(r[0]),
+    playerId:   String(r[4]),
+    playerName: r[5],
+    username:   r[6],
+    score:      parseFloat(r[7]),
+  }));
+
+  return { ok: true, scores };
+}
 
 function getGameScores({ fixtureId }) {
   const sheet = getSheet(SHEETS_NAMES.GAME_SCORES);
