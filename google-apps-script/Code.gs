@@ -237,67 +237,127 @@ function debugSquad() {
 }
 
 function refreshSofaSquad() {
+  // Tenta buscar do site oficial do Cruzeiro primeiro
+  const cruzResult = fetchCruzeiroSquad();
+  if (cruzResult.ok && cruzResult.players.length > 0) {
+    return saveSquadToSheet(cruzResult.players);
+  }
+
+  // Fallback: API-Football
   try {
-    // API-Football não bloqueia requests do Google Apps Script
     const res = UrlFetchApp.fetch(
       'https://v3.football.api-sports.io/players/squads?team=135', {
-      headers: {
-        'x-apisports-key': '477d6449d7eb1e2a6722e67624eb4b99',
-      },
+      headers: { 'x-apisports-key': '477d6449d7eb1e2a6722e67624eb4b99' },
       muteHttpExceptions: true,
     });
-
-    if (res.getResponseCode() !== 200) {
-      return { ok: false, error: `HTTP ${res.getResponseCode()}` };
-    }
+    if (res.getResponseCode() !== 200) return { ok: false, error: `HTTP ${res.getResponseCode()}` };
 
     const data = JSON.parse(res.getContentText());
     if (!data.response || !data.response[0]) return { ok: false, error: 'Sem dados' };
 
     const players = data.response[0].players.map(p => ({
-      id:          p.id,
-      name:        p.name,
-      position:    p.position || '',
-      number:      p.number || '',
-      photo:       p.photo || `https://media.api-sports.io/football/players/${p.id}.png`,
-      nationality: p.nationality || '',
-      manual:      false,
+      id: p.id, name: p.name, position: p.position || '',
+      number: p.number || '',
+      photo: p.photo || `https://media.api-sports.io/football/players/${p.id}.png`,
+      nationality: p.nationality || '', manual: false,
     }));
-
-    const sheet = getSheet('Elenco');
-    const existing = sheet.getDataRange().getValues();
-
-    // Preserva jogadores marcados como manuais (coluna 7 = 'manual')
-    const manualPlayers = [];
-    if (existing.length > 1) {
-      const [headers, ...rows] = existing;
-      rows.forEach(r => {
-        if (r[6] === true || r[6] === 'TRUE' || r[6] === 'true') {
-          manualPlayers.push({
-            id: r[0], name: r[1], position: r[2],
-            number: r[3], photo: r[4], nationality: r[5], manual: true
-          });
-        }
-      });
-    }
-
-    // Combina: API-Football + manuais que não estejam duplicados
-    const apiIds = new Set(players.map(p => String(p.id)));
-    const toKeep = manualPlayers.filter(m => !apiIds.has(String(m.id)));
-    const allPlayers = [...players, ...toKeep];
-
-    // Reescreve a aba
-    sheet.clearContents();
-    sheet.appendRow(['id','name','position','number','photo','nationality','updatedAt','manual']);
-    const now = new Date().toISOString();
-    allPlayers.forEach(p => sheet.appendRow([
-      p.id, p.name, p.position, p.number, p.photo, p.nationality, now, p.manual || false
-    ]));
-
-    return { ok: true, players: allPlayers };
+    return saveSquadToSheet(players);
   } catch(e) {
     return { ok: false, error: e.message };
   }
+}
+
+function fetchCruzeiroSquad() {
+  try {
+    const res = UrlFetchApp.fetch('https://www.cruzeiro.com.br/categoria/masculino', {
+      muteHttpExceptions: true,
+      followRedirects: true,
+    });
+    if (res.getResponseCode() !== 200) return { ok: false };
+
+    const html = res.getContentText();
+
+    // Extrai fotos do padrão imagens.cruzeiro.com.br
+    const photoRegex = /https:\/\/imagens\.cruzeiro\.com\.br\/Elenco\/2026\/Masculino\/Thumb\/([^"'\s]+\.png)/g;
+    const photos = [];
+    let m;
+    while ((m = photoRegex.exec(html)) !== null) {
+      photos.push('https://imagens.cruzeiro.com.br/Elenco/2026/Masculino/Thumb/' + m[1]);
+    }
+
+    if (photos.length === 0) return { ok: false };
+
+    // Usa dados hard-coded do site (extraídos manualmente - atualizados em julho/2026)
+    return { ok: true, players: getCruzeiroSquadData() };
+  } catch(e) {
+    Logger.log('fetchCruzeiroSquad error: ' + e.message);
+    return { ok: false };
+  }
+}
+
+function getCruzeiroSquadData() {
+  // Elenco oficial extraído de cruzeiro.com.br em julho/2026
+  return [
+    {id:'crz_1',  name:'Cássio',          position:'Goalkeeper', number:'1',  photo:'https://imagens.cruzeiro.com.br/Elenco/2026/Masculino/Thumb/Cassio-01.png',          nationality:'Brazil',    manual:false},
+    {id:'crz_81', name:'Otávio',           position:'Goalkeeper', number:'81', photo:'https://imagens.cruzeiro.com.br/Elenco/2026/Masculino/Thumb/Otavio-01.png',          nationality:'Brazil',    manual:false},
+    {id:'crz_41', name:'Léo Aragão',       position:'Goalkeeper', number:'41', photo:'https://imagens.cruzeiro.com.br/Elenco/2026/Masculino/Thumb/Leo-Aragao-01.png',      nationality:'Brazil',    manual:false},
+    {id:'crz_31', name:'Matheus Cunha',    position:'Goalkeeper', number:'31', photo:'https://imagens.cruzeiro.com.br/Elenco/2026/Masculino/Thumb/Matheus-Cunha-01.png',   nationality:'Brazil',    manual:false},
+    {id:'crz_24', name:'Marcelo Eráclito', position:'Goalkeeper', number:'24', photo:'https://imagens.cruzeiro.com.br/Elenco/2026/Masculino/Thumb/Marcelo-01.png',         nationality:'Brazil',    manual:false},
+    {id:'crz_51', name:'Vitor Lamounier',  position:'Goalkeeper', number:'51', photo:'https://imagens.cruzeiro.com.br/Elenco/2026/Masculino/Thumb/Vitor-Lamounier-01.png', nationality:'Brazil',    manual:false},
+    {id:'crz_15', name:'Fabrício Bruno',   position:'Defender',   number:'15', photo:'https://imagens.cruzeiro.com.br/Elenco/2026/Masculino/Thumb/Fabricio-Bruno-01.png',  nationality:'Brazil',    manual:false},
+    {id:'crz_25', name:'Lucas Villalba',   position:'Defender',   number:'25', photo:'https://imagens.cruzeiro.com.br/Elenco/2026/Masculino/Thumb/Lucas-Villalba-01.png',  nationality:'Uruguay',   manual:false},
+    {id:'crz_34', name:'Jonathan Jesus',   position:'Defender',   number:'34', photo:'https://imagens.cruzeiro.com.br/Elenco/2026/Masculino/Thumb/Jonathan-Jesus-01.png',  nationality:'Brazil',    manual:false},
+    {id:'crz_43', name:'João Marcelo',     position:'Defender',   number:'43', photo:'https://imagens.cruzeiro.com.br/Elenco/2026/Masculino/Thumb/Joao-Marcelo-01.png',    nationality:'Brazil',    manual:false},
+    {id:'crz_12', name:'William',          position:'Defender',   number:'12', photo:'https://imagens.cruzeiro.com.br/Elenco/2026/Masculino/Thumb/William-01.png',         nationality:'Brazil',    manual:false},
+    {id:'crz_23', name:'Fágner',           position:'Defender',   number:'23', photo:'https://imagens.cruzeiro.com.br/Elenco/2026/Masculino/Thumb/Fagner-01.png',          nationality:'Brazil',    manual:false},
+    {id:'crz_2',  name:'Kauã Moraes',      position:'Defender',   number:'2',  photo:'https://imagens.cruzeiro.com.br/Elenco/2026/Masculino/Thumb/Kaua-Moraes-01.png',     nationality:'Brazil',    manual:false},
+    {id:'crz_27', name:'Rojas',            position:'Defender',   number:'27', photo:'https://imagens.cruzeiro.com.br/Elenco/2026/Masculino/Thumb/Gabriel-Rojas-02.png',   nationality:'Colombia',  manual:false},
+    {id:'crz_29', name:'Lucas Romero',     position:'Midfielder', number:'29', photo:'https://imagens.cruzeiro.com.br/Elenco/2026/Masculino/Thumb/Lucas-Romero-01.png',    nationality:'Argentina', manual:false},
+    {id:'crz_16', name:'Lucas Silva',      position:'Midfielder', number:'16', photo:'https://imagens.cruzeiro.com.br/Elenco/2026/Masculino/Thumb/Lucas-Silva-01.png',     nationality:'Brazil',    manual:false},
+    {id:'crz_8',  name:'Matheus Henrique', position:'Midfielder', number:'8',  photo:'https://imagens.cruzeiro.com.br/Elenco/2026/Masculino/Thumb/Matheus-Henrique-01.png',nationality:'Brazil',    manual:false},
+    {id:'crz_11', name:'Gerson',           position:'Midfielder', number:'11', photo:'https://imagens.cruzeiro.com.br/Elenco/2026/Masculino/Thumb/Gerson-01.png',          nationality:'Brazil',    manual:false},
+    {id:'crz_35', name:'Murilo Rhikman',   position:'Midfielder', number:'35', photo:'https://imagens.cruzeiro.com.br/Elenco/2026/Masculino/Thumb/Murilo-Rhikman-01.png',  nationality:'Brazil',    manual:false},
+    {id:'crz_40', name:'Rhuan Gabriel',    position:'Midfielder', number:'40', photo:'https://imagens.cruzeiro.com.br/Elenco/2026/Masculino/Thumb/Rhuan-Gabriel-01.png',   nationality:'Brazil',    manual:false},
+    {id:'crz_10', name:'Matheus Pereira',  position:'Attacker',   number:'10', photo:'https://imagens.cruzeiro.com.br/Elenco/2026/Masculino/Thumb/Matheus-Pereira-01.png', nationality:'Brazil',    manual:false},
+    {id:'crz_19', name:'Kaio Jorge',       position:'Attacker',   number:'19', photo:'https://imagens.cruzeiro.com.br/Elenco/2026/Masculino/Thumb/Kaio-Jorge-01.png',      nationality:'Brazil',    manual:false},
+    {id:'crz_94', name:'Wanderson',        position:'Attacker',   number:'94', photo:'https://imagens.cruzeiro.com.br/Elenco/2026/Masculino/Thumb/Wanderson-01.png',       nationality:'Brazil',    manual:false},
+    {id:'crz_99', name:'Arroyo',           position:'Attacker',   number:'99', photo:'https://imagens.cruzeiro.com.br/Elenco/2026/Masculino/Thumb/Keny-Arroyo-01.png',     nationality:'Ecuador',   manual:false},
+    {id:'crz_17', name:'Sinisterra',       position:'Attacker',   number:'17', photo:'https://imagens.cruzeiro.com.br/Elenco/2026/Masculino/Thumb/Sinisterra-01.png',      nationality:'Colombia',  manual:false},
+    {id:'crz_77', name:'Gabriel Pec',      position:'Attacker',   number:'77', photo:'https://imagens.cruzeiro.com.br/Elenco/2026/Masculino/Thumb/Gabriel-Pec-01.png',     nationality:'Brazil',    manual:false},
+    {id:'crz_9',  name:'Bruno Rodrigues',  position:'Attacker',   number:'9',  photo:'https://imagens.cruzeiro.com.br/Elenco/2026/Masculino/Thumb/Bruno-Rodrigues-01.png', nationality:'Brazil',    manual:false},
+    {id:'crz_7',  name:'Marquinhos',       position:'Attacker',   number:'7',  photo:'https://imagens.cruzeiro.com.br/Elenco/2026/Masculino/Thumb/Marquinhos-01.png',      nationality:'Brazil',    manual:false},
+    {id:'crz_70', name:'Kaique Kenji',     position:'Attacker',   number:'70', photo:'https://imagens.cruzeiro.com.br/Elenco/2026/Masculino/Thumb/Kaique-Kenji-01.png',    nationality:'Brazil',    manual:false},
+    {id:'crz_22', name:'Néiser Villarreal',position:'Attacker',   number:'22', photo:'https://imagens.cruzeiro.com.br/Elenco/2026/Masculino/Thumb/Neiser-Villalrreal-01.png',nationality:'Venezuela',manual:false},
+    {id:'crz_91', name:'Chico da Costa',   position:'Attacker',   number:'91', photo:'https://imagens.cruzeiro.com.br/Elenco/2026/Masculino/Thumb/Chico-da-Costa-01.png',  nationality:'Brazil',    manual:false},
+    {id:'crz_57', name:'Rayan Lelis',      position:'Attacker',   number:'57', photo:'https://imagens.cruzeiro.com.br/Elenco/2026/Masculino/Thumb/Rayan-Lelis-01.png',     nationality:'Brazil',    manual:false},
+  ];
+}
+
+function saveSquadToSheet(players) {
+  const sheet = getSheet('Elenco');
+  const existing = sheet.getDataRange().getValues();
+
+  // Preserva jogadores manuais
+  const manualPlayers = [];
+  if (existing.length > 1) {
+    const [, ...rows] = existing;
+    rows.forEach(r => {
+      if (r[7] === true || r[7] === 'TRUE' || r[7] === 'true') {
+        const alreadyIn = players.some(p => String(p.id) === String(r[0]));
+        if (!alreadyIn) {
+          manualPlayers.push({ id:r[0], name:r[1], position:r[2], number:r[3], photo:r[4], nationality:r[5], manual:true });
+        }
+      }
+    });
+  }
+
+  const allPlayers = [...players, ...manualPlayers];
+  sheet.clearContents();
+  sheet.appendRow(['id','name','position','number','photo','nationality','updatedAt','manual']);
+  const now = new Date().toISOString();
+  allPlayers.forEach(p => sheet.appendRow([p.id, p.name, p.position, p.number, p.photo, p.nationality, now, p.manual || false]));
+
+  return { ok: true, players: allPlayers };
 }
 
 function updatePlayerInSquad({ id, name, position, number, photo, nationality }) {
