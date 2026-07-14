@@ -195,48 +195,27 @@ function updateUserHash({ username, passHash }) {
 }
 
 // =============================================
-// ELENCO (via proxy Apps Script → SofaScore)
+// ELENCO (via planilha Elenco - dados de cruzeiro.com.br)
 // =============================================
 
 function getSofaSquad() {
   const sheet = getSheet('Elenco');
   const data  = sheet.getDataRange().getValues();
 
-  // Retorna cache da planilha se tiver dados frescos (menos de 24h)
   if (data.length > 1) {
-    const lastUpdate = data[1][6]; // coluna updatedAt
+    const lastUpdate = data[1][6];
     if (lastUpdate && (new Date() - new Date(lastUpdate)) < 24 * 60 * 60 * 1000) {
-      const [headers, ...rows] = data;
+      const [, ...rows] = data;
       return { ok: true, players: rows.map(r => ({
         id: r[0], name: r[1], position: r[2], number: r[3], photo: r[4], nationality: r[5]
       }))};
     }
   }
 
-  // Busca no SofaScore
   return refreshSofaSquad();
 }
 
-function debugSquad() {
-  try {
-    Logger.log('Iniciando fetch SofaScore...');
-    const res = UrlFetchApp.fetch('https://api.sofascore.com/api/v1/team/1954/players', {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        'Accept': 'application/json',
-        'Referer': 'https://www.sofascore.com/',
-      },
-      muteHttpExceptions: true,
-    });
-    Logger.log('HTTP Code: ' + res.getResponseCode());
-    const text = res.getContentText();
-    Logger.log('Resposta (primeiros 500): ' + text.substring(0, 500));
-    const data = JSON.parse(text);
-    Logger.log('Jogadores encontrados: ' + (data.players ? data.players.length : 0));
-  } catch(e) {
-    Logger.log('ERRO: ' + e.message);
-  }
-}
+// Sem debug functions - sistema limpo
 
 function refreshSofaSquad() {
   // Usa dados oficiais do Cruzeiro (cruzeiro.com.br) - julho/2026
@@ -244,33 +223,7 @@ function refreshSofaSquad() {
   return saveSquadToSheet(cruzPlayers);
 }
 
-function fetchCruzeiroSquad() {
-  try {
-    const res = UrlFetchApp.fetch('https://www.cruzeiro.com.br/categoria/masculino', {
-      muteHttpExceptions: true,
-      followRedirects: true,
-    });
-    if (res.getResponseCode() !== 200) return { ok: false };
-
-    const html = res.getContentText();
-
-    // Extrai fotos do padrão imagens.cruzeiro.com.br
-    const photoRegex = /https:\/\/imagens\.cruzeiro\.com\.br\/Elenco\/2026\/Masculino\/Thumb\/([^"'\s]+\.png)/g;
-    const photos = [];
-    let m;
-    while ((m = photoRegex.exec(html)) !== null) {
-      photos.push('https://imagens.cruzeiro.com.br/Elenco/2026/Masculino/Thumb/' + m[1]);
-    }
-
-    if (photos.length === 0) return { ok: false };
-
-    // Usa dados hard-coded do site (extraídos manualmente - atualizados em julho/2026)
-    return { ok: true, players: getCruzeiroSquadData() };
-  } catch(e) {
-    Logger.log('fetchCruzeiroSquad error: ' + e.message);
-    return { ok: false };
-  }
-}
+// refreshSofaSquad usa dados hardcoded de cruzeiro.com.br
 
 function getCruzeiroSquadData() {
   // Elenco oficial extraído de cruzeiro.com.br em julho/2026
@@ -518,163 +471,14 @@ function getUserGameScores({ fixtureId, username }) {
 }
 
 // =============================================
-// JOGOS E ESCALAÇÕES (proxy SofaScore)
+// JOGOS E ESCALAÇÕES - sem APIs externas
+// Escalações ficam no localStorage do browser
 // =============================================
 
-const SOFA_HEADERS_GAS = {
-  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-  'Accept': 'application/json',
-  'Referer': 'https://www.sofascore.com/',
-};
-
-function sofaFetch(path) {
-  try {
-    const res = UrlFetchApp.fetch('https://api.sofascore.com/api/v1' + path, {
-      headers: SOFA_HEADERS_GAS,
-      muteHttpExceptions: true,
-    });
-    if (res.getResponseCode() !== 200) return null;
-    return JSON.parse(res.getContentText());
-  } catch(e) {
-    Logger.log('sofaFetch error: ' + e.message);
-    return null;
-  }
-}
-
-function debugFixtures() {
-  const url = 'https://api.sofascore.com/api/v1/team/1954/events/last/0';
-  const res = UrlFetchApp.fetch(url, {
-    headers: SOFA_HEADERS_GAS,
-    muteHttpExceptions: true,
-  });
-  Logger.log('HTTP Code: ' + res.getResponseCode());
-  Logger.log('Resposta: ' + res.getContentText().substring(0, 300));
-}
-
-function refreshFixtures() {
-  try {
-    const [last0, last1, last2, next0] = [
-      sofaFetch('/team/1954/events/last/0'),
-      sofaFetch('/team/1954/events/last/1'),
-      sofaFetch('/team/1954/events/last/2'),
-      sofaFetch('/team/1954/events/next/0'),
-    ];
-
-    const all = [
-      ...(last2?.events || []),
-      ...(last1?.events || []),
-      ...(last0?.events || []),
-      ...(next0?.events || []),
-    ];
-
-    // Remove duplicatas
-    const seen = new Set();
-    const unique = all.filter(f => {
-      if (seen.has(f.id)) return false;
-      seen.add(f.id);
-      return true;
-    });
-
-    // Competições monitoradas
-    const MONITORED = ['Brasileirão','Serie A','Copa do Brasil','Libertadores','CONMEBOL','Mineiro','Friendly'];
-    const filtered = unique.filter(f => {
-      const name = f.tournament?.name || '';
-      return MONITORED.some(m => name.toLowerCase().includes(m.toLowerCase()));
-    });
-
-    // Salva na planilha
-    const sheet = getSheet('Jogos');
-    sheet.clearContents();
-    sheet.appendRow(['id','homeTeam','homeTeamId','awayTeam','awayTeamId',
-      'homeScore','awayScore','status','timestamp','tournament','updatedAt']);
-
-    const now = new Date().toISOString();
-    filtered.forEach(f => {
-      sheet.appendRow([
-        f.id,
-        f.homeTeam?.name || '',
-        f.homeTeam?.id || '',
-        f.awayTeam?.name || '',
-        f.awayTeam?.id || '',
-        f.homeScore?.current ?? '',
-        f.awayScore?.current ?? '',
-        f.status?.type || '',
-        f.startTimestamp || '',
-        f.tournament?.name || '',
-        now,
-      ]);
-    });
-
-    return { ok: true, count: filtered.length };
-  } catch(e) {
-    return { ok: false, error: e.message };
-  }
-}
-
-function getFixtures() {
-  const sheet = getSheet('Jogos');
-  const data  = sheet.getDataRange().getValues();
-  if (data.length <= 1) {
-    // Se não tem dados, busca agora
-    const refresh = refreshFixtures();
-    if (!refresh.ok) return { ok: false, error: refresh.error };
-    return getFixtures(); // recursivo após refresh
-  }
-
-  const [headers, ...rows] = data;
-  const fixtures = rows.map(r => ({
-    id:          r[0],
-    homeTeam:    { name: r[1], id: r[2] },
-    awayTeam:    { name: r[3], id: r[4] },
-    homeScore:   { current: r[5] !== '' ? r[5] : null },
-    awayScore:   { current: r[6] !== '' ? r[6] : null },
-    status:      { type: r[7] },
-    startTimestamp: r[8],
-    tournament:  { name: r[9] },
-  }));
-
-  return { ok: true, fixtures };
-}
-
 function getLineup({ fixtureId }) {
-  try {
-    const data = sofaFetch('/event/' + fixtureId + '/lineups');
-    if (!data) return { ok: false, error: 'Sem dados de escalação' };
-
-    // Descobre qual time é o Cruzeiro
-    const cruzTeam = (data.home?.team?.name || '').toLowerCase().includes('cruzeiro')
-      ? data.home : data.away;
-    if (!cruzTeam?.players) return { ok: true, participated: [], all: [] };
-
-    const participated = [];
-    const all = [];
-
-    cruzTeam.players.forEach(p => {
-      const player = {
-        id:      p.player.id,
-        name:    p.player.name,
-        pos:     p.player.position || '',
-        number:  p.jerseyNumber || '',
-        played:  !p.substitute,
-        starter: !p.substitute,
-      };
-      all.push(player);
-      if (!p.substitute) participated.push(player);
-
-      // Verifica minutos jogados para substitutos
-      if (p.substitute) {
-        const mins = p.statistics?.minutesPlayed;
-        if (mins && mins > 0) {
-          player.played = true;
-          participated.push(player);
-        }
-      }
-    });
-
-    return { ok: true, participated, all };
-  } catch(e) {
-    return { ok: false, error: e.message };
-  }
+  // Escalações são gerenciadas no browser via localStorage
+  // Esta função existe para compatibilidade mas retorna vazio
+  return { ok: true, participated: [], all: [] };
 }
 
 // =============================================

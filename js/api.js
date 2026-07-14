@@ -1,35 +1,15 @@
 // =============================================
 // JEANSCORE – API
-// Elenco: API-Football (via Apps Script proxy)
-// Jogos:  cadastro manual pelo Admin
+// Elenco: cruzeiro.com.br (via Apps Script → planilha Elenco)
+// Jogos:  temporada 2026 (via Apps Script → planilha Jogos2026) + manuais
 // =============================================
 
 const API = {
 
   // ─────────────────────────────────────────
-  // API-FOOTBALL (elenco via proxy)
+  // ELENCO (via Apps Script proxy)
   // ─────────────────────────────────────────
-  async _footballRequest(endpoint, params = {}) {
-    const query = new URLSearchParams(params).toString();
-    const url   = `${CONFIG.API_BASE}${endpoint}?${query}`;
-    const cached = cacheGet(url);
-    if (cached) return cached;
-    try {
-      const res = await fetch(url, {
-        headers: { 'x-apisports-key': CONFIG.API_KEY }
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      cacheSet(url, data);
-      return data;
-    } catch(e) {
-      console.error('Erro API-Football:', e);
-      return null;
-    }
-  },
-
   async getSquad() {
-    // Tenta via Apps Script proxy (que busca da planilha Elenco)
     if (isSheetsConfigured()) {
       try {
         const res = await fetch(CONFIG.SHEETS_API_URL, {
@@ -40,31 +20,22 @@ const API = {
         const data = await res.json();
         if (data.ok && data.players?.length) return data.players;
       } catch(e) {
-        console.warn('Proxy squad falhou:', e);
+        console.warn('getSquad falhou:', e);
       }
     }
-    // Fallback direto: API-Football
-    const data = await this._footballRequest('/players/squads', { team: CONFIG.CRUZEIRO_ID });
-    if (!data?.response?.length) return [];
-    return data.response[0].players.map(p => ({
-      ...p,
-      photo: p.photo || `https://media.api-sports.io/football/players/${p.id}.png`,
-    })) || [];
+    return [];
   },
 
   // ─────────────────────────────────────────
-  // JOGOS MANUAIS (localStorage + Sheets)
+  // JOGOS (Sheets + manuais do localStorage)
   // ─────────────────────────────────────────
 
   getAllFixtures() {
-    // Prioridade 1: jogos do Sheets (temporada completa)
-    // Prioridade 2: jogos manuais do localStorage
     const manual = this._getManualJogos();
     return manual.map(j => this._jogoToFixture(j));
   },
 
   async getAllFixturesAsync() {
-    // Busca do Sheets se configurado
     if (isSheetsConfigured()) {
       try {
         const res = await fetch(CONFIG.SHEETS_API_URL, {
@@ -74,7 +45,6 @@ const API = {
         });
         const data = await res.json();
         if (data.ok && data.jogos?.length) {
-          // Mescla com jogos manuais locais (sobrescreve por ID)
           const sheetsIds = new Set(data.jogos.map(j => j.id));
           const manual    = this._getManualJogos().filter(j => !sheetsIds.has(j.id));
           const all       = [
@@ -84,39 +54,38 @@ const API = {
           return all.sort((a, b) => a.startTimestamp - b.startTimestamp);
         }
       } catch(e) {
-        console.warn('Sheets fixtures falhou, usando localStorage:', e);
+        console.warn('Sheets fixtures falhou:', e);
       }
     }
     return this.getAllFixtures();
   },
 
   _sheetsJogoToFixture(j) {
-    const leagueId = this._compNameToId(j.comp);
+    const leagueId   = this._compNameToId(j.comp);
     const leagueInfo = CONFIG.COMPETITIONS[leagueId] || {};
     return {
-      id:           j.id,
-      homeTeam:     { name: j.home, id: null, logo: '' },
-      awayTeam:     { name: j.away, id: null, logo: '' },
-      homeScore:    { current: j.homeScore },
-      awayScore:    { current: j.awayScore },
-      status:       { type: j.status || 'notstarted' },
+      id:             j.id,
+      homeTeam:       { name: j.home,  id: null, logo: '' },
+      awayTeam:       { name: j.away,  id: null, logo: '' },
+      homeScore:      { current: j.homeScore },
+      awayScore:      { current: j.awayScore },
+      status:         { type: j.status || 'notstarted' },
       startTimestamp: j.timestamp || 0,
-      tournament:   { name: j.comp || leagueInfo.name || '', id: leagueId },
-      _leagueId:    leagueId,
-      _manual:      true,
-      _liberado:    j.liberado || false,
-      _stadium:     j.stadium || '',
+      tournament:     { name: j.comp || leagueInfo.name || '', id: leagueId },
+      _leagueId:      leagueId,
+      _manual:        true,
+      _liberado:      j.liberado || false,
+      _stadium:       j.stadium || '',
     };
   },
 
   _compNameToId(compName) {
     if (!compName) return 999;
     const n = compName.toLowerCase();
-    if (n.includes('mineiro'))        return 629;
+    if (n.includes('mineiro'))                                         return 629;
     if (n.includes('brasileiro') || n.includes('série a') || n.includes('serie a')) return 71;
-    if (n.includes('copa do brasil')) return 73;
-    if (n.includes('libertadores'))   return 13;
-    if (n.includes('amistoso'))       return 999;
+    if (n.includes('copa do brasil'))                                  return 73;
+    if (n.includes('libertadores'))                                    return 13;
     return 999;
   },
 
@@ -128,38 +97,37 @@ const API = {
   _jogoToFixture(j) {
     const leagueInfo = CONFIG.COMPETITIONS[j.leagueId] || {};
     return {
-      id:            j.id,
-      homeTeam:      { name: j.home, id: null, logo: '' },
-      awayTeam:      { name: j.away, id: null, logo: '' },
-      homeScore:     { current: j.homeScore ?? null },
-      awayScore:     { current: j.awayScore ?? null },
-      status:        { type: j.status || 'notstarted' },
+      id:             j.id,
+      homeTeam:       { name: j.home, id: null, logo: '' },
+      awayTeam:       { name: j.away, id: null, logo: '' },
+      homeScore:      { current: j.homeScore ?? null },
+      awayScore:      { current: j.awayScore ?? null },
+      status:         { type: j.status || 'notstarted' },
       startTimestamp: j.timestamp,
-      tournament:    { name: leagueInfo.name || j.leagueName || '', id: j.leagueId },
-      _leagueId:     j.leagueId,
-      _manual:       true,
-      _liberado:     j.liberado || false,
+      tournament:     { name: leagueInfo.name || j.leagueName || '', id: j.leagueId },
+      _leagueId:      j.leagueId,
+      _manual:        true,
+      _liberado:      j.liberado || false,
     };
   },
 
-  // Escalação de um jogo (localStorage)
+  // ─────────────────────────────────────────
+  // ESCALAÇÃO (localStorage)
+  // ─────────────────────────────────────────
   async getLineup(fixtureId) {
     try {
       const escalacoes = JSON.parse(localStorage.getItem('js_escalacoes') || '{}');
       const playerIds  = escalacoes[String(fixtureId)];
-      if (playerIds && playerIds.length > 0) {
-        // Usa APP.squad — garante que está carregado
+      if (playerIds?.length) {
         const squad = (typeof APP !== 'undefined' && APP.squad?.length) ? APP.squad : [];
         if (!squad.length) {
-          // Squad ainda não carregado — retorna IDs sem dados completos
-          // openRatingModal vai buscar os dados do squad quando disponível
           return { participated: playerIds.map(id => ({ id, name: '', pos: '', played: true, starter: true })), all: [] };
         }
-        const participated = playerIds.map(id => {
-          const p = squad.find(s => String(s.id) === String(id));
-          return p ? { id: p.id, name: p.name, pos: p.position, played: true, starter: true } : null;
-        }).filter(Boolean);
-        if (participated.length > 0) return { participated, all: participated };
+        const participated = playerIds
+          .map(id => squad.find(s => String(s.id) === String(id)))
+          .filter(Boolean)
+          .map(p => ({ id: p.id, name: p.name, pos: p.position, played: true, starter: true }));
+        if (participated.length) return { participated, all: participated };
       }
     } catch(e) { console.error('getLineup error:', e); }
     return { participated: [], all: [] };
@@ -171,10 +139,10 @@ const API = {
 
   formatStatus(fixture) {
     const type = fixture.status?.type || '';
-    if (type === 'finished')    return { label: 'Encerrado', css: 'status-ft',   done: true,  live: false };
-    if (type === 'notstarted')  return { label: 'Agendado',  css: 'status-ns',   done: false, live: false };
-    if (type === 'inprogress')  return { label: 'AO VIVO',   css: 'status-live', done: false, live: true  };
-    if (type === 'postponed')   return { label: 'Adiado',    css: 'status-ft',   done: false, live: false };
+    if (type === 'finished')   return { label: 'Encerrado', css: 'status-ft',   done: true,  live: false };
+    if (type === 'notstarted') return { label: 'Agendado',  css: 'status-ns',   done: false, live: false };
+    if (type === 'inprogress') return { label: 'AO VIVO',   css: 'status-live', done: false, live: true  };
+    if (type === 'postponed')  return { label: 'Adiado',    css: 'status-ft',   done: false, live: false };
     return { label: 'Agendado', css: 'status-ns', done: false, live: false };
   },
 
@@ -217,7 +185,7 @@ const API = {
     const d = new Date(timestamp * 1000);
     return d.toLocaleDateString('pt-BR', {
       day: '2-digit', month: '2-digit', year: '2-digit',
-      hour: '2-digit', minute: '2-digit'
+      hour: '2-digit', minute: '2-digit',
     });
   },
 };

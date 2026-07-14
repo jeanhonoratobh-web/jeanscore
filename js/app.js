@@ -27,7 +27,6 @@ function getPlayerPhoto(name) {
 }
 
 function playerImgHTML(name, apiPhoto, cssClass = '') {
-  // Usa foto da API (API-Football) — fotos SofaScore bloqueadas por CORB no browser
   const src = apiPhoto || getPlayerPhoto(name) || '';
   if (src) return `<img src="${src}" alt="${name}" class="${cssClass}"
     onerror="this.style.display='none';this.nextElementSibling.style.display='flex'" />
@@ -372,8 +371,8 @@ Object.assign(APP, {
       const scoreStr = (status.done || status.live) ? `${score.home} – ${score.away}` : 'vs';
       const gs       = SHEETS.local.getGameScores();
       const hasScores = gs[f.id] && Object.keys(gs[f.id]).length > 0;
-      const homeLogo = f.homeTeam?.logo || (f.homeTeam?.id ? `https://a.espncdn.com/i/teamlogos/soccer/500/${f.homeTeam.id}.png` : '');
-      const awayLogo = f.awayTeam?.logo || (f.awayTeam?.id ? `https://a.espncdn.com/i/teamlogos/soccer/500/${f.awayTeam.id}.png` : '');
+      const homeLogo = f.homeTeam?.logo || '';
+      const awayLogo = f.awayTeam?.logo || '';
 
       return `<div class="jogo-card" data-fixture="${f.id}" style="cursor:${status.done ? 'pointer' : 'default'}"
         ${status.done ? `onclick="APP.openJogoDetalhe('${f.id}')"` : ''}>
@@ -718,13 +717,13 @@ Object.assign(APP, {
         <span class="jogo-comp-badge">${API.compFlag(f)} ${API.compName(f)}</span>
         <div class="jogo-teams">
           <div class="jogo-team">
-            <img class="jogo-team-logo" src="${f.homeTeam?.logo || `https://a.espncdn.com/i/teamlogos/soccer/500/${f.homeTeam?.id}.png`}"
+            <img class="jogo-team-logo" src="${f.homeTeam?.logo || ''}"
               alt="${f.homeTeam?.name}" onerror="this.style.display='none'" />
             <div class="jogo-team-name">${f.homeTeam?.name || '—'}</div>
           </div>
           <div class="jogo-placar">${sc.home} – ${sc.away}</div>
           <div class="jogo-team">
-            <img class="jogo-team-logo" src="${f.awayTeam?.logo || `https://a.espncdn.com/i/teamlogos/soccer/500/${f.awayTeam?.id}.png`}"
+            <img class="jogo-team-logo" src="${f.awayTeam?.logo || ''}"
               alt="${f.awayTeam?.name}" onerror="this.style.display='none'" />
             <div class="jogo-team-name">${f.awayTeam?.name || '—'}</div>
           </div>
@@ -858,20 +857,15 @@ Object.assign(APP, {
   },
 
   _getPlayerName(id) {
-    // Tenta por ID exato primeiro
+    // Tenta por ID exato
     let p = this.squad.find(s => String(s.id) === String(id));
     if (p) return p.name;
-    // Tenta por ID numérico (notas antigas da API-Football)
-    if (!isNaN(parseInt(id))) {
-      p = this.squad.find(s => String(s.id) === String(parseInt(id)));
-      if (p) return p.name;
-      // Última tentativa: busca nos sheetsScores pelo playerName
-      try {
-        const ss = JSON.parse(localStorage.getItem('js_sheetsScores') || '[]');
-        const match = ss.find(s => String(s.playerId) === String(id));
-        if (match?.playerName) return match.playerName;
-      } catch(e) {}
-    }
+    // Fallback: busca nos sheetsScores pelo playerName (notas antigas)
+    try {
+      const ss = JSON.parse(localStorage.getItem('js_sheetsScores') || '[]');
+      const match = ss.find(s => String(s.playerId) === String(id));
+      if (match?.playerName) return match.playerName;
+    } catch(e) {}
     return null;
   },
 });
@@ -1081,18 +1075,22 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('closeNotaPrincipal').addEventListener('click', () =>
     document.getElementById('modalNotaPrincipal').classList.remove('open'));
 
-  // Limpa dados antigos da ESPN do localStorage
+  // Limpa dados antigos de APIs externas do localStorage (migração)
   try {
     const gs = JSON.parse(localStorage.getItem('js_gameScores') || '{}');
     const manualJogos = JSON.parse(localStorage.getItem('js_manualJogos') || '[]');
-    const manualIds = new Set(manualJogos.map(j => String(j.id)));
+    const validIds = new Set([
+      ...manualJogos.map(j => String(j.id)),
+      // IDs da planilha Jogos2026 (j01, j02, ..., j63)
+      ...Array.from({length: 63}, (_, i) => `j${String(i+1).padStart(2,'0')}`),
+    ]);
     let changed = false;
     Object.keys(gs).forEach(fid => {
-      if (!manualIds.has(fid) && !String(fid).startsWith('manual_')) {
+      if (!validIds.has(fid) && !String(fid).startsWith('manual_') && !String(fid).match(/^j\d+$/)) {
         delete gs[fid]; changed = true;
       }
     });
-    if (changed) { localStorage.setItem('js_gameScores', JSON.stringify(gs)); console.log('Dados ESPN antigos limpos do localStorage'); }
+    if (changed) localStorage.setItem('js_gameScores', JSON.stringify(gs));
   } catch(e) {}
 
   APP.navigate('elenco');
@@ -1629,8 +1627,7 @@ Object.assign(APP, {
     const pos  = document.getElementById('elencoPosicao').value;
     const num  = document.getElementById('elencoNumero').value.trim();
     const nac  = document.getElementById('elencoNacionalidade').value.trim();
-    const foto = document.getElementById('elencoFoto').value.trim() ||
-                 `https://media.api-sports.io/football/players/${id}.png`;
+    const foto = document.getElementById('elencoFoto').value.trim() || '';
 
     if (!id || !nome) { showToast('ID e nome são obrigatórios', 'error'); return; }
 

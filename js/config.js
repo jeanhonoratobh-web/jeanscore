@@ -3,41 +3,20 @@
 // =============================================
 
 const CONFIG = {
-  // API-Football
-  API_KEY: '477d6449d7eb1e2a6722e67624eb4b99',
-  API_BASE: 'https://v3.football.api-sports.io',
-
   // Cruzeiro
-  CRUZEIRO_ID: 135,       // ID do Cruzeiro na API-Football (elenco)
-  CRUZEIRO_SOFA_ID: 1954, // ID do Cruzeiro no SofaScore (jogos/escalações)
   CRUZEIRO_NAME: 'Cruzeiro',
 
-  // Temporada (2024 = última temporada com dados disponíveis no plano Free)
-  SEASON: 2024,
-
-  // Competições monitoradas (IDs SofaScore)
+  // Competições monitoradas
   COMPETITIONS: {
-    71:  { name: 'Série A',           short: 'Série A',  flag: '🇧🇷', sofaId: 325  },
-    73:  { name: 'Copa do Brasil',    short: 'Copa BR',  flag: '🇧🇷', sofaId: 390  },
-    13:  { name: 'Libertadores',      short: 'Libertad', flag: '🌎',  sofaId: 384  },
-    629: { name: 'Campeonato Mineiro',short: 'Mineiro',  flag: '🇧🇷', sofaId: 893  },
-    999: { name: 'Amistoso',          short: 'Amistoso', flag: '🤝',  sofaId: null },
-  },
-
-  // Mapeamento nome SofaScore → ID competição local
-  SOFA_TOURNAMENT_MAP: {
-    'Brasileirão Betano':       71,
-    'Brasileirao Betano':       71,
-    'Serie A':                  71,
-    'Copa do Brasil':           73,
-    'CONMEBOL Libertadores':    13,
-    'Libertadores':             13,
-    'Campeonato Mineiro':       629,
-    'Mineiro':                  629,
+    71:  { name: 'Série A',            short: 'Série A',  flag: '🇧🇷' },
+    73:  { name: 'Copa do Brasil',     short: 'Copa BR',  flag: '🇧🇷' },
+    13:  { name: 'Copa Libertadores',  short: 'Libertad', flag: '🌎'  },
+    629: { name: 'Campeonato Mineiro', short: 'Mineiro',  flag: '🇧🇷' },
+    999: { name: 'Amistoso',           short: 'Amistoso', flag: '🤝'  },
   },
 
   // Admin
-  ADMIN_USER: 'Jean',
+  ADMIN_USER:  'Jean',
   ADMIN_EMAIL: 'jean.honorato.bh@gmail.com',
 
   // Google Apps Script URL
@@ -47,7 +26,7 @@ const CONFIG = {
   DEFAULT_NOTE: 5,
 
   // Cache em memória (ms)
-  CACHE_TTL: 5 * 60 * 1000, // 5 minutos
+  CACHE_TTL: 5 * 60 * 1000,
 };
 
 // Cache simples em memória
