@@ -1337,56 +1337,6 @@ Object.assign(APP, {
     showToast(`Escalação salva: ${selected.length} jogadores`, 'success');
   },
 
-  _loadAdminJogosList() {
-    const el    = document.getElementById('adminJogosList');
-    const jogos = this._getManualJogos().slice().reverse();
-    const escalacoes = this._getEscalacoes();
-
-    if (!jogos.length) {
-      el.innerHTML = '<p class="info-text">Nenhum jogo cadastrado ainda.</p>';
-      return;
-    }
-
-    el.innerHTML = jogos.map(j => {
-      const comp     = CONFIG.COMPETITIONS[j.leagueId] || {};
-      const date     = API.formatDate(j.timestamp);
-      const placar   = j.homeScore !== null && j.awayScore !== null ? `${j.homeScore} – ${j.awayScore}` : 'vs';
-      const numJog   = (escalacoes[j.id] || []).length;
-      const isLib    = j.liberado;
-      const isFin    = j.status === 'finished';
-
-      return `
-      <div class="admin-jogo-item">
-        <div class="admin-jogo-info">
-          <div class="admin-jogo-header">
-            <span class="jogo-comp-badge" style="font-size:0.7rem">${comp.flag || '⚽'} ${comp.short || j.leagueName}</span>
-            ${isLib
-              ? `<span class="badge-lib-on">🟢 Liberado para votação</span>`
-              : `<span class="badge-lib-off">🔒 Bloqueado</span>`}
-          </div>
-          <div class="admin-jogo-times">${j.home} <strong>${placar}</strong> ${j.away}</div>
-          <div class="admin-jogo-meta">
-            ${date} &nbsp;·&nbsp;
-            <span style="color:${isFin ? 'var(--green)' : 'var(--gold)'}">${isFin ? 'Encerrado' : j.status === 'inprogress' ? 'Ao Vivo' : 'Agendado'}</span>
-            &nbsp;·&nbsp; ${numJog} jogador${numJog !== 1 ? 'es' : ''} na escalação
-          </div>
-        </div>
-        <div class="admin-jogo-actions">
-          <button class="btn btn-sm ${isLib ? 'btn-danger' : 'btn-success'}"
-            onclick="APP._toggleLiberacao('${j.id}')">
-            ${isLib ? '🔒 Bloquear' : '🟢 Liberar'}
-          </button>
-          <button class="btn btn-sm btn-outline" onclick="APP._editarJogo('${j.id}')">
-            <i class="fas fa-edit"></i> Editar
-          </button>
-          <button class="btn btn-sm btn-danger" onclick="APP._deletarJogo('${j.id}')">
-            <i class="fas fa-trash"></i>
-          </button>
-        </div>
-      </div>`;
-    }).join('');
-  },
-
   _editarJogo(id) {
     const jogos = this._getManualJogos();
     const j = jogos.find(x => x.id === id);
@@ -1403,13 +1353,13 @@ Object.assign(APP, {
     const d = new Date(j.timestamp * 1000);
     const local = new Date(d - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
     document.getElementById('jogoDate').value = local;
-
-    this._mostrarEscalacao(id, j.home, j.away);
-    document.querySelector('.admin-jogo-form')?.scrollIntoView({ behavior: 'smooth' });
+    // Abre o formulário
+    if (!this._jogoFormOpen) this._toggleJogoForm();
+    document.querySelector('#jogoFormWrap')?.scrollIntoView({ behavior: 'smooth' });
   },
 
   _deletarJogo(id) {
-    if (!confirm('Deletar este jogo e todas as notas relacionadas?')) return;
+    if (!confirm('Deletar este jogo?')) return;
     const jogos = this._getManualJogos().filter(j => j.id !== id);
     localStorage.setItem('js_manualJogos', JSON.stringify(jogos));
     showToast('Jogo removido.');
