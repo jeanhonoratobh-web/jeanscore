@@ -1518,11 +1518,9 @@ Object.assign(APP, {
           <button class="btn btn-sm btn-outline" onclick="APP._editarJogadorElenco('${p.id}')">
             <i class="fas fa-edit"></i>
           </button>
-          ${isManual
-            ? `<button class="btn btn-sm btn-danger" onclick="APP._removerJogador('${p.id}', '${p.name.replace(/'/g, "\\'")}')">
-                <i class="fas fa-trash"></i>
-               </button>`
-            : ''}
+          <button class="btn btn-sm btn-danger" onclick="APP._removerJogador('${p.id}', '${p.name.replace(/'/g, "\\'")}')">
+            <i class="fas fa-trash"></i>
+          </button>
         </div>
       </div>`;
     }).join('');
@@ -1610,7 +1608,9 @@ Object.assign(APP, {
     if (!confirm(`Remover ${nome} do elenco?`)) return;
 
     if (isSheetsConfigured()) {
-      await SHEETS.request('removePlayer', { id });
+      // Tenta remover — se não for manual, força remoção marcando como deletado
+      const res = await SHEETS.request('removePlayer', { id, force: true });
+      if (!res.ok) { showToast(res.error || 'Erro ao remover', 'error'); return; }
     }
 
     this.squad = this.squad.filter(p => String(p.id) !== String(id));

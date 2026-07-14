@@ -364,17 +364,17 @@ function addPlayerToSquad({ id, name, position, number, photo, nationality }) {
   return { ok: true };
 }
 
-function removePlayerFromSquad({ id }) {
+function removePlayerFromSquad({ id, force }) {
   const sheet = getSheet('Elenco');
   const data  = sheet.getDataRange().getValues();
   for (let i = data.length - 1; i >= 1; i--) {
     if (String(data[i][0]) === String(id)) {
-      // Só remove se for manual
-      if (data[i][7] === true || data[i][7] === 'TRUE' || data[i][7] === 'true') {
+      // Com force=true, remove qualquer jogador. Sem force, só remove manuais.
+      if (force || data[i][7] === true || data[i][7] === 'TRUE' || data[i][7] === 'true') {
         sheet.deleteRow(i + 1);
         return { ok: true };
       } else {
-        return { ok: false, error: 'Não é possível remover jogadores da API' };
+        return { ok: false, error: 'Jogador da API — use force:true para remover' };
       }
     }
   }
