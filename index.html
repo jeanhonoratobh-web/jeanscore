@@ -138,6 +138,7 @@
           <button class="tab-btn active" data-admin-tab="pendentes">Cadastros Pendentes</button>
           <button class="tab-btn" data-admin-tab="usuarios">Usuários</button>
           <button class="tab-btn" data-admin-tab="jogos">Jogos</button>
+          <button class="tab-btn" data-admin-tab="elenco">Elenco</button>
         </div>
         <div id="adminContent" class="admin-content">
           <div id="admin-pendentes">
@@ -238,8 +239,62 @@
 
             </div>
           </div>
-        </div>
-        <div id="adminContent" class="admin-content" style="display:none"><!-- removido --></div>
+          <div id="admin-elenco">
+            <div class="card-dark">
+              <h3><i class="fas fa-user-plus"></i> Adicionar Jogador Manual</h3>
+              <div class="form-row">
+                <div class="form-group">
+                  <label>ID (SofaScore ou único)</label>
+                  <input type="text" id="elencoId" placeholder="Ex: 995072" />
+                </div>
+                <div class="form-group">
+                  <label>Nome</label>
+                  <input type="text" id="elencoNome" placeholder="Ex: Gabriel Pec" />
+                </div>
+              </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label>Posição</label>
+                  <select id="elencoPosicao" class="select-dark">
+                    <option value="Goalkeeper">Goleiro</option>
+                    <option value="Defender">Defensor</option>
+                    <option value="Midfielder">Meio-campista</option>
+                    <option value="Attacker">Atacante</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label>Número</label>
+                  <input type="number" id="elencoNumero" placeholder="Ex: 11" min="1" max="99" />
+                </div>
+                <div class="form-group">
+                  <label>Nacionalidade</label>
+                  <input type="text" id="elencoNacionalidade" placeholder="Ex: Brazil" value="Brazil" />
+                </div>
+              </div>
+              <div class="form-row">
+                <div class="form-group" style="flex:2">
+                  <label>URL da Foto (opcional)</label>
+                  <input type="text" id="elencoFoto" placeholder="https://... ou deixe vazio para padrão" />
+                </div>
+              </div>
+              <div class="form-row">
+                <button class="btn btn-primary" id="btnAdicionarJogador">
+                  <i class="fas fa-plus"></i> Adicionar ao Elenco
+                </button>
+                <button class="btn btn-outline" id="btnRecarregarElenco">
+                  <i class="fas fa-sync"></i> Recarregar da API
+                </button>
+              </div>
+            </div>
+
+            <div class="card-dark" style="margin-top:1rem">
+              <h3><i class="fas fa-users"></i> Elenco Atual</h3>
+              <div style="color:var(--gray-400);font-size:0.8rem;margin-bottom:1rem">
+                Jogadores marcados com ⚙️ foram adicionados manualmente e não serão removidos ao recarregar.
+              </div>
+              <div id="adminElencoList" class="admin-elenco-list"></div>
+            </div>
+          </div>
       </div>
     </section>
 

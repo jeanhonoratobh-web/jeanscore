@@ -35,6 +35,7 @@ function doPost(e) {
       getSquad:        () => getSofaSquad(),
       refreshSquad:    () => refreshSofaSquad(),
       addPlayer:       () => addPlayerToSquad(payload),
+      removePlayer:    () => removePlayerFromSquad(payload),
       getFixtures:     () => getFixtures(),
       refreshFixtures: () => refreshFixtures(),
       getLineup:       () => getLineup(payload),
@@ -301,17 +302,29 @@ function refreshSofaSquad() {
 function addPlayerToSquad({ id, name, position, number, photo, nationality }) {
   const sheet = getSheet('Elenco');
   const data  = sheet.getDataRange().getValues();
-
-  // Verifica se já existe
   for (let i = 1; i < data.length; i++) {
-    if (String(data[i][0]) === String(id)) {
-      return { ok: false, error: 'Jogador já existe' };
-    }
+    if (String(data[i][0]) === String(id)) return { ok: false, error: 'Jogador já existe' };
   }
-
   const now = new Date().toISOString();
   sheet.appendRow([id, name, position || '', number || '', photo || '', nationality || '', now, true]);
   return { ok: true };
+}
+
+function removePlayerFromSquad({ id }) {
+  const sheet = getSheet('Elenco');
+  const data  = sheet.getDataRange().getValues();
+  for (let i = data.length - 1; i >= 1; i--) {
+    if (String(data[i][0]) === String(id)) {
+      // Só remove se for manual
+      if (data[i][7] === true || data[i][7] === 'TRUE' || data[i][7] === 'true') {
+        sheet.deleteRow(i + 1);
+        return { ok: true };
+      } else {
+        return { ok: false, error: 'Não é possível remover jogadores da API' };
+      }
+    }
+  }
+  return { ok: false, error: 'Jogador não encontrado' };
 }
 
 // Trigger diário — configure em: Gatilhos > Adicionar gatilho > refreshSofaSquad > Diário

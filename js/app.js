@@ -837,6 +837,7 @@ Object.assign(APP, {
     if (tab === 'usuarios')  this._loadUsuarios();
     if (tab === 'notas')     this._loadNotasAdmin();
     if (tab === 'jogos')     this.loadAdminJogos();
+    if (tab === 'elenco')    this.loadAdminElenco();
   },
 
   async _loadPendentes() {
@@ -1379,5 +1380,115 @@ Object.assign(APP, {
     const notes = JSON.parse(localStorage.getItem(key) || '{}');
     const val = notes[playerId];
     return val !== undefined ? [val] : [];
+  },
+});
+
+// =============================================
+// ADMIN – ELENCO
+// =============================================
+
+Object.assign(APP, {
+
+  loadAdminElenco() {
+    document.getElementById('btnAdicionarJogador').onclick  = () => this._adicionarJogador();
+    document.getElementById('btnRecarregarElenco').onclick  = () => this._recarregarElenco();
+    this._renderAdminElenco();
+  },
+
+  _renderAdminElenco() {
+    const el = document.getElementById('adminElencoList');
+    if (!this.squad.length) {
+      el.innerHTML = '<p class="info-text">Elenco não carregado.</p>';
+      return;
+    }
+
+    const posShort = { Goalkeeper: 'GOL', Defender: 'DEF', Midfielder: 'MEI', Attacker: 'ATA' };
+
+    el.innerHTML = this.squad.map(p => {
+      const photo    = p.photo || getPlayerPhoto(p.name) || '';
+      const isManual = p.manual === true || p.manual === 'true' || p._manual;
+      return `
+      <div class="admin-elenco-item ${isManual ? 'manual' : ''}">
+        ${photo
+          ? `<img class="admin-elenco-photo" src="${photo}" alt="${p.name}" onerror="this.style.display='none'" />`
+          : `<div class="admin-elenco-photo" style="display:flex;align-items:center;justify-content:center">
+               <i class="fas fa-user" style="color:var(--gray-400)"></i></div>`}
+        <div class="admin-elenco-info">
+          <div class="admin-elenco-name">
+            ${p.name} ${isManual ? '<span style="color:var(--gold);font-size:0.7rem">⚙️ manual</span>' : ''}
+          </div>
+          <div class="admin-elenco-meta">${posShort[p.position] || p.position || '—'} · #${p.number || '—'} · ${p.nationality || ''}</div>
+        </div>
+        <div class="admin-elenco-actions">
+          ${isManual
+            ? `<button class="btn btn-sm btn-danger" onclick="APP._removerJogador('${p.id}', '${p.name}')">
+                <i class="fas fa-trash"></i>
+               </button>`
+            : ''}
+        </div>
+      </div>`;
+    }).join('');
+  },
+
+  async _adicionarJogador() {
+    const id     = document.getElementById('elencoId').value.trim();
+    const nome   = document.getElementById('elencoNome').value.trim();
+    const pos    = document.getElementById('elencoPosicao').value;
+    const num    = document.getElementById('elencoNumero').value.trim();
+    const nac    = document.getElementById('elencoNacionalidade').value.trim();
+    const foto   = document.getElementById('elencoFoto').value.trim() ||
+                   `https://media.api-sports.io/football/players/${id}.png`;
+
+    if (!id || !nome) { showToast('ID e nome são obrigatórios', 'error'); return; }
+    if (this.squad.find(p => String(p.id) === String(id))) {
+      showToast('Jogador já existe no elenco', 'error'); return;
+    }
+
+    const novoJogador = { id, name: nome, position: pos, number: num, photo: foto, nationality: nac, manual: true };
+
+    // Adiciona no Sheets
+    if (isSheetsConfigured()) {
+      const res = await SHEETS.request('addPlayer', {
+        id, name: nome, position: pos, number: num, photo: foto, nationality: nac
+      });
+      if (!res.ok) { showToast(res.error || 'Erro ao adicionar', 'error'); return; }
+    }
+
+    // Adiciona no squad local
+    this.squad.push(novoJogador);
+
+    // Limpa formulário
+    document.getElementById('elencoId').value    = '';
+    document.getElementById('elencoNome').value  = '';
+    document.getElementById('elencoNumero').value = '';
+    document.getElementById('elencoFoto').value  = '';
+
+    showToast(`${nome} adicionado ao elenco!`, 'success');
+    this._renderAdminElenco();
+  },
+
+  async _removerJogador(id, nome) {
+    if (!confirm(`Remover ${nome} do elenco?`)) return;
+
+    if (isSheetsConfigured()) {
+      await SHEETS.request('removePlayer', { id });
+    }
+
+    this.squad = this.squad.filter(p => String(p.id) !== String(id));
+    showToast(`${nome} removido.`);
+    this._renderAdminElenco();
+  },
+
+  async _recarregarElenco() {
+    const el = document.getElementById('adminElencoList');
+    el.innerHTML = '<div class="loading-spinner"><i class="fas fa-futbol fa-spin"></i> Recarregando...</div>';
+
+    if (isSheetsConfigured()) {
+      await SHEETS.request('refreshSquad');
+    }
+
+    this.squad = await API.getSquad();
+    showToast('Elenco recarregado!', 'success');
+    this._renderAdminElenco();
   },
 });
