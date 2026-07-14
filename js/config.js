@@ -41,7 +41,7 @@ const CONFIG = {
   ADMIN_EMAIL: 'jean.honorato.bh@gmail.com',
 
   // Google Apps Script URL
-  SHEETS_API_URL: 'https://script.google.com/macros/s/AKfycbxn4qKFWSseS5ftkhBXsHv-i_eG8-QT08eWwbOm2S04KupupIGzU4WOOOW9sEbuy8EE/exec',
+  SHEETS_API_URL: 'https://script.google.com/macros/s/AKfycbwYMgPBmEvq5Zo9oX6gDmx8p1OjsYj-zsehNpGpsaLRw-eNhBMI6C_OsFNYwcZYh64A/exec',
 
   // Nota padrão para jogadores que participaram mas não foram avaliados
   DEFAULT_NOTE: 5,

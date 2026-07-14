@@ -237,34 +237,9 @@ function debugSquad() {
 }
 
 function refreshSofaSquad() {
-  // Tenta buscar do site oficial do Cruzeiro primeiro
-  const cruzResult = fetchCruzeiroSquad();
-  if (cruzResult.ok && cruzResult.players.length > 0) {
-    return saveSquadToSheet(cruzResult.players);
-  }
-
-  // Fallback: API-Football
-  try {
-    const res = UrlFetchApp.fetch(
-      'https://v3.football.api-sports.io/players/squads?team=135', {
-      headers: { 'x-apisports-key': '477d6449d7eb1e2a6722e67624eb4b99' },
-      muteHttpExceptions: true,
-    });
-    if (res.getResponseCode() !== 200) return { ok: false, error: `HTTP ${res.getResponseCode()}` };
-
-    const data = JSON.parse(res.getContentText());
-    if (!data.response || !data.response[0]) return { ok: false, error: 'Sem dados' };
-
-    const players = data.response[0].players.map(p => ({
-      id: p.id, name: p.name, position: p.position || '',
-      number: p.number || '',
-      photo: p.photo || `https://media.api-sports.io/football/players/${p.id}.png`,
-      nationality: p.nationality || '', manual: false,
-    }));
-    return saveSquadToSheet(players);
-  } catch(e) {
-    return { ok: false, error: e.message };
-  }
+  // Usa dados oficiais do Cruzeiro (cruzeiro.com.br) - julho/2026
+  const cruzPlayers = getCruzeiroSquadData();
+  return saveSquadToSheet(cruzPlayers);
 }
 
 function fetchCruzeiroSquad() {
