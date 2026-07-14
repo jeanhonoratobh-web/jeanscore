@@ -79,9 +79,11 @@ const SHEETS = {
   // ── Sincroniza notas do Sheets para localStorage ──
   async syncGameScores() {
     try {
-      // Busca todas as notas do Sheets (sem filtro de fixtureId)
       const res = await this.request('getAllGameScores');
       if (!res.ok || !res.scores) return;
+
+      // Salva os scores brutos com playerName para resolver IDs antigos depois
+      localStorage.setItem('js_sheetsScores', JSON.stringify(res.scores));
 
       // Reconstrói o formato do localStorage
       const gs = {};

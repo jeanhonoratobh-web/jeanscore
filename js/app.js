@@ -105,24 +105,47 @@ const APP = {
     // Se não há notas permanentes, usa média das notas de jogo como fallback
     if (!Object.keys(mainScores).length) {
       const gs = SHEETS.local.getGameScores();
+
+      // Cria mapa nome → ID atual do squad (para resolver IDs antigos de APIs)
+      const nameToCurrentId = {};
+      squad.forEach(p => {
+        nameToCurrentId[p.name.toLowerCase().trim()] = String(p.id);
+      });
+
+      // Também mapeia IDs antigos (API-Football) → IDs atuais via nome
+      // buscando nos scores do Sheets que têm playerName
+      const oldIdToCurrentId = {};
+      try {
+        const cached = JSON.parse(localStorage.getItem('js_sheetsScores') || '[]');
+        cached.forEach(s => {
+          if (s.playerName) {
+            const key = s.playerName.toLowerCase().trim();
+            const currentId = nameToCurrentId[key];
+            if (currentId) oldIdToCurrentId[String(s.playerId)] = currentId;
+          }
+        });
+      } catch(e) {}
+
+      const totals = {}; // currentId → scores[]
+
       Object.entries(gs).forEach(([fid, players]) => {
         Object.entries(players).forEach(([pid, userScores]) => {
           const vals = Object.values(userScores).map(Number).filter(v => !isNaN(v));
           if (!vals.length) return;
-          const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
-          if (!mainScores[pid]) mainScores[pid] = { scores: [], votes: 0 };
-          if (!mainScores[pid].scores) mainScores[pid].scores = [];
-          mainScores[pid].scores.push(...vals);
+
+          // Resolve o ID atual
+          const currentId = oldIdToCurrentId[String(pid)] || String(pid);
+
+          if (!totals[currentId]) totals[currentId] = [];
+          totals[currentId].push(...vals);
         });
       });
-      // Calcula médias finais
-      Object.keys(mainScores).forEach(pid => {
-        if (mainScores[pid].scores?.length) {
-          const scores = mainScores[pid].scores;
-          mainScores[pid].avg   = scores.reduce((a, b) => a + b, 0) / scores.length;
-          mainScores[pid].votes = scores.length;
-          delete mainScores[pid].scores;
-        }
+
+      Object.entries(totals).forEach(([pid, scores]) => {
+        mainScores[pid] = {
+          avg:   scores.reduce((a, b) => a + b, 0) / scores.length,
+          votes: scores.length,
+        };
       });
     }
 
