@@ -1390,8 +1390,9 @@ Object.assign(APP, {
 Object.assign(APP, {
 
   loadAdminElenco() {
-    document.getElementById('btnAdicionarJogador').onclick  = () => this._adicionarJogador();
-    document.getElementById('btnRecarregarElenco').onclick  = () => this._recarregarElenco();
+    this._elencoEditId = null;
+    document.getElementById('btnAdicionarJogador').onclick = () => this._salvarJogador();
+    document.getElementById('btnRecarregarElenco').onclick = () => this._recarregarElenco();
     this._renderAdminElenco();
   },
 
@@ -1415,13 +1416,16 @@ Object.assign(APP, {
                <i class="fas fa-user" style="color:var(--gray-400)"></i></div>`}
         <div class="admin-elenco-info">
           <div class="admin-elenco-name">
-            ${p.name} ${isManual ? '<span style="color:var(--gold);font-size:0.7rem">⚙️ manual</span>' : ''}
+            ${p.name} ${isManual ? '<span style="color:var(--gold);font-size:0.7rem">⚙️</span>' : ''}
           </div>
           <div class="admin-elenco-meta">${posShort[p.position] || p.position || '—'} · #${p.number || '—'} · ${p.nationality || ''}</div>
         </div>
         <div class="admin-elenco-actions">
+          <button class="btn btn-sm btn-outline" onclick="APP._editarJogadorElenco('${p.id}')">
+            <i class="fas fa-edit"></i>
+          </button>
           ${isManual
-            ? `<button class="btn btn-sm btn-danger" onclick="APP._removerJogador('${p.id}', '${p.name}')">
+            ? `<button class="btn btn-sm btn-danger" onclick="APP._removerJogador('${p.id}', '${p.name.replace(/'/g, "\\'")}')">
                 <i class="fas fa-trash"></i>
                </button>`
             : ''}
@@ -1430,40 +1434,81 @@ Object.assign(APP, {
     }).join('');
   },
 
-  async _adicionarJogador() {
-    const id     = document.getElementById('elencoId').value.trim();
-    const nome   = document.getElementById('elencoNome').value.trim();
-    const pos    = document.getElementById('elencoPosicao').value;
-    const num    = document.getElementById('elencoNumero').value.trim();
-    const nac    = document.getElementById('elencoNacionalidade').value.trim();
-    const foto   = document.getElementById('elencoFoto').value.trim() ||
-                   `https://media.api-sports.io/football/players/${id}.png`;
+  _editarJogadorElenco(id) {
+    const p = this.squad.find(s => String(s.id) === String(id));
+    if (!p) return;
+
+    // Preenche o formulário com os dados do jogador
+    document.getElementById('elencoId').value          = p.id;
+    document.getElementById('elencoId').disabled       = true; // ID não pode mudar
+    document.getElementById('elencoNome').value        = p.name;
+    document.getElementById('elencoPosicao').value     = p.position || 'Attacker';
+    document.getElementById('elencoNumero').value      = p.number || '';
+    document.getElementById('elencoNacionalidade').value = p.nationality || '';
+    document.getElementById('elencoFoto').value        = p.photo || '';
+
+    // Muda o botão para "Salvar Edição"
+    const btn = document.getElementById('btnAdicionarJogador');
+    btn.innerHTML = '<i class="fas fa-save"></i> Salvar Edição';
+    btn.style.background = 'var(--blue-light)';
+
+    this._elencoEditId = String(id);
+
+    // Rola até o formulário
+    document.querySelector('.admin-jogo-form, #admin-elenco .card-dark')?.scrollIntoView({ behavior: 'smooth' });
+    showToast(`Editando ${p.name}`, '');
+  },
+
+  async _salvarJogador() {
+    const id  = document.getElementById('elencoId').value.trim();
+    const nome = document.getElementById('elencoNome').value.trim();
+    const pos  = document.getElementById('elencoPosicao').value;
+    const num  = document.getElementById('elencoNumero').value.trim();
+    const nac  = document.getElementById('elencoNacionalidade').value.trim();
+    const foto = document.getElementById('elencoFoto').value.trim() ||
+                 `https://media.api-sports.io/football/players/${id}.png`;
 
     if (!id || !nome) { showToast('ID e nome são obrigatórios', 'error'); return; }
-    if (this.squad.find(p => String(p.id) === String(id))) {
-      showToast('Jogador já existe no elenco', 'error'); return;
+
+    const isEdit = this._elencoEditId !== null;
+
+    if (isEdit) {
+      // Edição
+      if (isSheetsConfigured()) {
+        const res = await SHEETS.request('updatePlayer', { id, name: nome, position: pos, number: num, photo: foto, nationality: nac });
+        if (!res.ok) { showToast(res.error || 'Erro ao salvar', 'error'); return; }
+      }
+      // Atualiza localmente
+      const idx = this.squad.findIndex(p => String(p.id) === String(id));
+      if (idx >= 0) {
+        this.squad[idx] = { ...this.squad[idx], name: nome, position: pos, number: num, photo: foto, nationality: nac };
+      }
+      showToast(`${nome} atualizado!`, 'success');
+    } else {
+      // Novo jogador
+      if (this.squad.find(p => String(p.id) === String(id))) {
+        showToast('Jogador já existe. Clique em ✏️ para editar.', 'error'); return;
+      }
+      if (isSheetsConfigured()) {
+        const res = await SHEETS.request('addPlayer', { id, name: nome, position: pos, number: num, photo: foto, nationality: nac });
+        if (!res.ok) { showToast(res.error || 'Erro ao adicionar', 'error'); return; }
+      }
+      this.squad.push({ id, name: nome, position: pos, number: num, photo: foto, nationality: nac, manual: true });
+      showToast(`${nome} adicionado!`, 'success');
     }
 
-    const novoJogador = { id, name: nome, position: pos, number: num, photo: foto, nationality: nac, manual: true };
+    // Reseta formulário
+    document.getElementById('elencoId').value          = '';
+    document.getElementById('elencoId').disabled       = false;
+    document.getElementById('elencoNome').value        = '';
+    document.getElementById('elencoNumero').value      = '';
+    document.getElementById('elencoFoto').value        = '';
+    document.getElementById('elencoNacionalidade').value = 'Brazil';
+    const btn = document.getElementById('btnAdicionarJogador');
+    btn.innerHTML = '<i class="fas fa-plus"></i> Adicionar ao Elenco';
+    btn.style.background = '';
+    this._elencoEditId = null;
 
-    // Adiciona no Sheets
-    if (isSheetsConfigured()) {
-      const res = await SHEETS.request('addPlayer', {
-        id, name: nome, position: pos, number: num, photo: foto, nationality: nac
-      });
-      if (!res.ok) { showToast(res.error || 'Erro ao adicionar', 'error'); return; }
-    }
-
-    // Adiciona no squad local
-    this.squad.push(novoJogador);
-
-    // Limpa formulário
-    document.getElementById('elencoId').value    = '';
-    document.getElementById('elencoNome').value  = '';
-    document.getElementById('elencoNumero').value = '';
-    document.getElementById('elencoFoto').value  = '';
-
-    showToast(`${nome} adicionado ao elenco!`, 'success');
     this._renderAdminElenco();
   },
 

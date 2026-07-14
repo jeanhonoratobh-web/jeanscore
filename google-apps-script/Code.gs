@@ -36,6 +36,7 @@ function doPost(e) {
       refreshSquad:    () => refreshSofaSquad(),
       addPlayer:       () => addPlayerToSquad(payload),
       removePlayer:    () => removePlayerFromSquad(payload),
+      updatePlayer:    () => updatePlayerInSquad(payload),
       getFixtures:     () => getFixtures(),
       refreshFixtures: () => refreshFixtures(),
       getLineup:       () => getLineup(payload),
@@ -297,6 +298,23 @@ function refreshSofaSquad() {
   } catch(e) {
     return { ok: false, error: e.message };
   }
+}
+
+function updatePlayerInSquad({ id, name, position, number, photo, nationality }) {
+  const sheet = getSheet('Elenco');
+  const data  = sheet.getDataRange().getValues();
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][0]) === String(id)) {
+      sheet.getRange(i + 1, 2).setValue(name || data[i][1]);
+      sheet.getRange(i + 1, 3).setValue(position || data[i][2]);
+      sheet.getRange(i + 1, 4).setValue(number !== undefined ? number : data[i][3]);
+      sheet.getRange(i + 1, 5).setValue(photo || data[i][4]);
+      sheet.getRange(i + 1, 6).setValue(nationality || data[i][5]);
+      sheet.getRange(i + 1, 7).setValue(new Date().toISOString());
+      return { ok: true };
+    }
+  }
+  return { ok: false, error: 'Jogador não encontrado' };
 }
 
 function addPlayerToSquad({ id, name, position, number, photo, nationality }) {
