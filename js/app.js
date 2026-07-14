@@ -1104,6 +1104,7 @@ Object.assign(APP, {
     }));
 
     this._adminJogosAll = fixtures;
+    console.log('Admin jogos carregados:', fixtures.length, 'passados:', fixtures.filter(j => j.homeScore !== null && j.homeScore !== undefined && j.homeScore !== '').length);
     this._renderAdminJogosList();
   },
 
@@ -1111,23 +1112,26 @@ Object.assign(APP, {
     const el   = document.getElementById('adminJogosList');
     const now  = Date.now() / 1000;
     let jogos  = [...(this._adminJogosAll || [])];
+
+    if (!jogos.length) {
+      el.innerHTML = '<p class="info-text">Nenhum jogo encontrado. Clique em Recarregar.</p>';
+      return;
+    }
+
     const filter = this._adminJogosFilter || 'passados';
 
+    // Determina se o jogo é passado: tem homeScore numérico OU timestamp no passado
+    const isPast = (j) => {
+      const hasScore = j.homeScore !== null && j.homeScore !== undefined && j.homeScore !== '';
+      const pastTime = j.timestamp > 0 && j.timestamp < now - 7200;
+      return hasScore || pastTime || j.status === 'finished';
+    };
+
     if (filter === 'passados') {
-      // Tem placar OU data no passado (com mais de 2h)
-      jogos = jogos.filter(j =>
-        (j.homeScore !== null && j.homeScore !== '' && j.homeScore !== undefined) ||
-        (j.status === 'finished') ||
-        (j.timestamp > 0 && j.timestamp < now - 7200)
-      );
+      jogos = jogos.filter(j => isPast(j));
       jogos.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
     } else if (filter === 'futuros') {
-      // Sem placar E data no futuro OU timestamp = 0
-      jogos = jogos.filter(j =>
-        (j.homeScore === null || j.homeScore === '' || j.homeScore === undefined) &&
-        j.status !== 'finished' &&
-        (j.timestamp === 0 || j.timestamp > now - 7200)
-      );
+      jogos = jogos.filter(j => !isPast(j));
       jogos.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
     } else {
       jogos.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
