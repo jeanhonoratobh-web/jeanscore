@@ -102,6 +102,30 @@ const APP = {
       });
     }
 
+    // Se não há notas permanentes, usa média das notas de jogo como fallback
+    if (!Object.keys(mainScores).length) {
+      const gs = SHEETS.local.getGameScores();
+      Object.entries(gs).forEach(([fid, players]) => {
+        Object.entries(players).forEach(([pid, userScores]) => {
+          const vals = Object.values(userScores).map(Number).filter(v => !isNaN(v));
+          if (!vals.length) return;
+          const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
+          if (!mainScores[pid]) mainScores[pid] = { scores: [], votes: 0 };
+          if (!mainScores[pid].scores) mainScores[pid].scores = [];
+          mainScores[pid].scores.push(...vals);
+        });
+      });
+      // Calcula médias finais
+      Object.keys(mainScores).forEach(pid => {
+        if (mainScores[pid].scores?.length) {
+          const scores = mainScores[pid].scores;
+          mainScores[pid].avg   = scores.reduce((a, b) => a + b, 0) / scores.length;
+          mainScores[pid].votes = scores.length;
+          delete mainScores[pid].scores;
+        }
+      });
+    }
+
     this._mainScores = mainScores;
     this._currentPosFilter  = 'all';
     this._currentSortFilter = 'nota';
@@ -737,7 +761,7 @@ Object.assign(APP, {
 
     el.innerHTML = ranked.map((p, i) => {
       const cls   = ['gold','silver','bronze'][i] || '';
-      const photo = getPlayerPhoto(p.name) || '';
+      const photo = this._getPlayerPhoto(p.name, p.id);
       return `<div class="ranking-item">
         <span class="ranking-pos ${cls}">${i + 1}º</span>
         ${photo
@@ -793,7 +817,7 @@ Object.assign(APP, {
 
     el.innerHTML = top.map((p, i) => {
       const cls   = ['gold','silver','bronze'][i] || '';
-      const photo = getPlayerPhoto(p.name) || '';
+      const photo = this._getPlayerPhoto(p.name, p.id);
       return `<div class="ranking-item">
         <span class="ranking-pos ${cls}">${i + 1}º</span>
         ${photo
@@ -806,6 +830,12 @@ Object.assign(APP, {
         <span class="ranking-score" style="${scoreColor(p.avg)};padding:0.15rem 0.5rem;border-radius:4px">${p.avg}</span>
       </div>`;
     }).join('');
+  },
+
+  _getPlayerPhoto(name, id) {
+    const fromSquad = this.squad.find(s => String(s.id) === String(id) || s.name === name);
+    if (fromSquad?.photo) return fromSquad.photo;
+    return getPlayerPhoto(name) || '';
   },
 
   _getPlayerName(id) {
