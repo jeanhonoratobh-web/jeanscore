@@ -587,6 +587,10 @@ body {
   width: min(700px, 95vw);
 }
 
+#modalAvaliarJogo .avaliar-players-grid {
+  width: 100%;
+}
+
 .modal-close {
   position: absolute;
   top: 1rem;
@@ -1241,18 +1245,17 @@ body {
 }
 
 .rating-list-item {
-  display: flex;
-  flex-direction: row;
+  display: grid;
+  grid-template-columns: 1fr auto;
   align-items: center;
-  gap: 0.75rem;
-  padding: 0.6rem 0.9rem;
+  gap: 1rem;
+  padding: 0.65rem 1rem;
   border-radius: 8px;
   background: rgba(255,255,255,0.04);
   border: 1.5px solid transparent;
   transition: var(--transition);
   box-sizing: border-box;
   width: 100%;
-  min-width: 0;
 }
 .rating-list-item:hover { background: rgba(255,255,255,0.07); }
 .rating-list-item.rated { border-color: var(--gold); background: rgba(245,158,11,0.06); }
@@ -1261,14 +1264,13 @@ body {
   display: flex;
   flex-direction: row;
   align-items: center;
-  gap: 0.6rem;
-  flex: 1;
+  gap: 0.75rem;
   min-width: 0;
   overflow: hidden;
 }
 
 .rating-list-name {
-  font-size: 0.9rem;
+  font-size: 0.92rem;
   font-weight: 600;
   color: var(--white);
   white-space: nowrap;
@@ -1279,11 +1281,11 @@ body {
 }
 
 .rating-list-pos {
-  font-size: 0.7rem;
+  font-size: 0.72rem;
   font-weight: 700;
   color: var(--gold);
   background: rgba(245,158,11,0.15);
-  padding: 0.1rem 0.5rem;
+  padding: 0.15rem 0.5rem;
   border-radius: 4px;
   flex-shrink: 0;
   white-space: nowrap;
@@ -1291,19 +1293,18 @@ body {
 
 .rating-list-input {
   flex-shrink: 0;
-  width: 80px;
 }
 
 .note-input-lg {
-  width: 80px;
+  width: 90px;
   background: rgba(255,255,255,0.08);
   border: 1.5px solid rgba(255,255,255,0.2);
   border-radius: 8px;
   color: var(--white);
   text-align: center;
-  font-size: 1rem;
+  font-size: 1.05rem;
   font-weight: 700;
-  padding: 0.4rem 0.25rem;
+  padding: 0.4rem 0.5rem;
   box-sizing: border-box;
   transition: var(--transition);
   display: block;
