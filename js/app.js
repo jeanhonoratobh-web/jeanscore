@@ -754,14 +754,10 @@ Object.assign(APP, {
 
   _renderRankingGeral() {
     const el = document.getElementById('rankingGeral');
-    const mainScores = SHEETS.local.getMainScores();
     const gs = SHEETS.local.getGameScores();
     const totals = {};
 
-    Object.entries(mainScores).forEach(([pid, score]) => {
-      if (!totals[pid]) totals[pid] = [];
-      totals[pid].push(parseFloat(score));
-    });
+    // Agrega todas as notas de todos os jogos por jogador
     Object.values(gs).forEach(fixture => {
       Object.entries(fixture).forEach(([pid, userScores]) => {
         if (!totals[pid]) totals[pid] = [];
@@ -771,10 +767,10 @@ Object.assign(APP, {
 
     const ranked = Object.entries(totals)
       .map(([pid, scores]) => ({
-        id: pid,
-        avg: (scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(1),
+        id:    pid,
+        avg:   (scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(1),
         votes: scores.length,
-        name: this._getPlayerName(parseInt(pid)),
+        name:  this._getPlayerName(pid),  // sem parseInt
       }))
       .filter(p => p.name)
       .sort((a, b) => parseFloat(b.avg) - parseFloat(a.avg))
@@ -828,7 +824,7 @@ Object.assign(APP, {
       Object.entries(players).forEach(([pid, userScores]) => {
         const vals = Object.values(userScores).map(Number);
         const avg  = (vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(1);
-        const name = this._getPlayerName(parseInt(pid));
+        const name = this._getPlayerName(pid);
         if (name) best.push({ name, avg, match: label, id: pid });
       });
     });
@@ -862,8 +858,21 @@ Object.assign(APP, {
   },
 
   _getPlayerName(id) {
-    const p = this.squad.find(s => s.id === id);
-    return p ? p.name : null;
+    // Tenta por ID exato primeiro
+    let p = this.squad.find(s => String(s.id) === String(id));
+    if (p) return p.name;
+    // Tenta por ID numérico (notas antigas da API-Football)
+    if (!isNaN(parseInt(id))) {
+      p = this.squad.find(s => String(s.id) === String(parseInt(id)));
+      if (p) return p.name;
+      // Última tentativa: busca nos sheetsScores pelo playerName
+      try {
+        const ss = JSON.parse(localStorage.getItem('js_sheetsScores') || '[]');
+        const match = ss.find(s => String(s.playerId) === String(id));
+        if (match?.playerName) return match.playerName;
+      } catch(e) {}
+    }
+    return null;
   },
 });
 
