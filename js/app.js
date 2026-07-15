@@ -1,4 +1,4 @@
-// =============================================
+﻿// =============================================
 // JEANSCORE – APP PRINCIPAL
 // =============================================
 
@@ -90,61 +90,36 @@ const APP = {
     }
     const year = new Date().getFullYear();
     let mainScores = {};
-    if (isSheetsConfigured()) {
-      const res = await SHEETS.request('getNotasPermanentes', { year });
-      if (res?.ok) mainScores = res.scores || {};
-    } else {
-      const key = `js_notaperm_${year}`;
-      const local = JSON.parse(localStorage.getItem(key) || '{}');
-      Object.entries(local).forEach(([pid, nota]) => {
-        mainScores[pid] = { avg: nota, votes: 1 };
-      });
-    }
 
-    // Se não há notas permanentes, usa média das notas de jogo como fallback
+    // Permanent scores from Supabase
+    const pr = await SUPA.getPermanentScores(year);
+    if (pr.ok) mainScores = pr.scores || {};
+
+    // Fallback: game scores average if no permanent scores yet
     if (!Object.keys(mainScores).length) {
-      const gs = SHEETS.local.getGameScores();
-
-      // Cria mapa nome → ID atual do squad (para resolver IDs antigos de APIs)
-      const nameToCurrentId = {};
-      squad.forEach(p => {
-        nameToCurrentId[p.name.toLowerCase().trim()] = String(p.id);
+      const gs = this._getLocalGameScores();
+      const nameToId = {};
+      squad.forEach(p => { nameToId[p.name.toLowerCase().trim()] = String(p.id); });
+      const cached = JSON.parse(localStorage.getItem('js_sheetsScores') || '[]');
+      const oldIdToNew = {};
+      cached.forEach(s => {
+        if (s.playerName) {
+          const cur = nameToId[s.playerName.toLowerCase().trim()];
+          if (cur) oldIdToNew[String(s.playerId)] = cur;
+        }
       });
-
-      // Também mapeia IDs antigos (API-Football) → IDs atuais via nome
-      // buscando nos scores do Sheets que têm playerName
-      const oldIdToCurrentId = {};
-      try {
-        const cached = JSON.parse(localStorage.getItem('js_sheetsScores') || '[]');
-        cached.forEach(s => {
-          if (s.playerName) {
-            const key = s.playerName.toLowerCase().trim();
-            const currentId = nameToCurrentId[key];
-            if (currentId) oldIdToCurrentId[String(s.playerId)] = currentId;
-          }
-        });
-      } catch(e) {}
-
-      const totals = {}; // currentId → scores[]
-
-      Object.entries(gs).forEach(([fid, players]) => {
+      const totals = {};
+      Object.entries(gs).forEach(([, players]) => {
         Object.entries(players).forEach(([pid, userScores]) => {
           const vals = Object.values(userScores).map(Number).filter(v => !isNaN(v));
           if (!vals.length) return;
-
-          // Resolve o ID atual
-          const currentId = oldIdToCurrentId[String(pid)] || String(pid);
-
-          if (!totals[currentId]) totals[currentId] = [];
-          totals[currentId].push(...vals);
+          const resolvedId = oldIdToNew[pid] || pid;
+          if (!totals[resolvedId]) totals[resolvedId] = [];
+          totals[resolvedId].push(...vals);
         });
       });
-
       Object.entries(totals).forEach(([pid, scores]) => {
-        mainScores[pid] = {
-          avg:   scores.reduce((a, b) => a + b, 0) / scores.length,
-          votes: scores.length,
-        };
+        mainScores[pid] = { avg: scores.reduce((a,b)=>a+b,0)/scores.length, votes: scores.length };
       });
     }
 
@@ -369,7 +344,7 @@ Object.assign(APP, {
       const status   = API.formatStatus(f);
       const score    = API.getScore(f);
       const scoreStr = (status.done || status.live) ? `${score.home} – ${score.away}` : 'vs';
-      const gs       = SHEETS.local.getGameScores();
+      const gs       = this._getLocalGameScores();
       const hasScores = gs[f.id] && Object.keys(gs[f.id]).length > 0;
       const homeLogo = f.homeTeam?.logo || '';
       const awayLogo = f.awayTeam?.logo || '';
@@ -429,7 +404,7 @@ Object.assign(APP, {
     // Busca escalação e notas
     const escalacoes = JSON.parse(localStorage.getItem('js_escalacoes') || '{}');
     const playerIds  = escalacoes[String(fixtureId)] || [];
-    const gs         = SHEETS.local.getGameScores();
+    const gs         = this._getLocalGameScores();
     const jogoScores = gs[fixtureId] || {};
 
     // Monta lista de jogadores com médias
@@ -545,7 +520,7 @@ Object.assign(APP, {
 
     const username = AUTH.getUsername();
     const savedScores = {};
-    const gs = SHEETS.local.getGameScores();
+    const gs = this._getLocalGameScores();
     if (gs[fixtureId]) {
       Object.entries(gs[fixtureId]).forEach(([pid, userScores]) => {
         if (userScores[username] !== undefined) savedScores[pid] = userScores[username];
@@ -607,7 +582,7 @@ Object.assign(APP, {
 
     const username = AUTH.getUsername();
     const savedScores = {};
-    const gs = SHEETS.local.getGameScores();
+    const gs = this._getLocalGameScores();
     if (gs[fixtureId]) {
       Object.entries(gs[fixtureId]).forEach(([pid, userScores]) => {
         if (userScores[username] !== undefined) savedScores[pid] = userScores[username];
@@ -677,11 +652,15 @@ Object.assign(APP, {
       if (!input || input.value === '') continue;
       const val = Math.min(10, Math.max(0, parseFloat(input.value)));
       if (isNaN(val)) continue;
-      SHEETS.local.submitGameScore(fixtureId, p.id, username, val);
+
+      // Save locally
+      this._submitLocalScore(fixtureId, p.id, username, val);
       saved++;
-      if (isSheetsConfigured()) {
-        await SHEETS.submitGameScore(fixtureId, date, home, away, p.id, p.name, username, val);
-      }
+
+      // Save to Supabase
+      await SUPA.submitGameScore(
+        fixtureId, p.id, p.name, username, val, home, away, date
+      );
     }
 
     document.getElementById('modalAvaliarJogo').classList.remove('open');
@@ -709,7 +688,7 @@ Object.assign(APP, {
     if (!past.length) { content.innerHTML = '<p class="info-text">Nenhum jogo liberado para avaliação ainda.<br><small style="color:var(--gray-400)">O admin precisa liberar os jogos após encerrá-los.</small></p>'; return; }
 
     content.innerHTML = past.map(f => {
-      const gs   = SHEETS.local.getGameScores();
+      const gs   = this._getLocalGameScores();
       const user = AUTH.getUsername();
       const rated = gs[f.id] && Object.values(gs[f.id]).some(s => s[user] !== undefined);
       const sc   = API.getScore(f);
@@ -745,15 +724,25 @@ Object.assign(APP, {
 Object.assign(APP, {
 
   async loadRankings() {
-    // Sincroniza do Sheets antes de renderizar
-    if (isSheetsConfigured()) await SHEETS.syncGameScores();
+    // Sync game scores from Supabase into local cache
+    const r = await SUPA.getAllGameScores();
+    if (r.ok && r.scores?.length) {
+      localStorage.setItem('js_sheetsScores', JSON.stringify(r.scores));
+      const gs = {};
+      r.scores.forEach(s => {
+        if (!gs[s.fixture_id]) gs[s.fixture_id] = {};
+        if (!gs[s.fixture_id][s.player_id]) gs[s.fixture_id][s.player_id] = {};
+        gs[s.fixture_id][s.player_id][s.username] = parseFloat(s.score);
+      });
+      localStorage.setItem('js_gameScores', JSON.stringify(gs));
+    }
     this._renderRankingGeral();
     this._renderRankingJogo();
   },
 
   _renderRankingGeral() {
     const el = document.getElementById('rankingGeral');
-    const gs = SHEETS.local.getGameScores();
+    const gs = this._getLocalGameScores();
     const totals = {};
 
     // Agrega todas as notas de todos os jogos por jogador
@@ -793,7 +782,7 @@ Object.assign(APP, {
 
   _renderRankingJogo() {
     const el = document.getElementById('rankingJogo');
-    const gs = SHEETS.local.getGameScores();
+    const gs = this._getLocalGameScores();
     const best = [];
 
     const fixtures = this.allFixtures.length ? this.allFixtures : API.getAllFixtures();
@@ -850,6 +839,19 @@ Object.assign(APP, {
     }).join('');
   },
 
+  _getLocalGameScores() {
+    try { return JSON.parse(localStorage.getItem('js_gameScores') || '{}'); }
+    catch { return {}; }
+  },
+
+  _submitLocalScore(fixtureId, playerId, username, score) {
+    const gs = this._getLocalGameScores();
+    if (!gs[fixtureId]) gs[fixtureId] = {};
+    if (!gs[fixtureId][playerId]) gs[fixtureId][playerId] = {};
+    gs[fixtureId][playerId][username] = score;
+    localStorage.setItem('js_gameScores', JSON.stringify(gs));
+  },
+
   _getPlayerPhoto(name, id) {
     const fromSquad = this.squad.find(s => String(s.id) === String(id) || s.name === name);
     if (fromSquad?.photo) return fromSquad.photo;
@@ -902,19 +904,8 @@ Object.assign(APP, {
     const el = document.getElementById('pendentesList');
     el.innerHTML = '<div class="loading-spinner"><i class="fas fa-futbol fa-spin"></i></div>';
 
-    let pending = [];
-    if (isSheetsConfigured()) {
-      const res = await SHEETS.getUsers();
-      if (res?.ok && res.users) {
-        pending = res.users.filter(u => u.status === 'pending');
-        // Sincroniza com localStorage
-        const local = SHEETS.local.getUsers();
-        res.users.forEach(u => { if (!local.find(l => l.username === u.username)) local.push(u); });
-        SHEETS.local.saveUsers(local);
-      }
-    } else {
-      pending = SHEETS.local.getUsers().filter(u => u.status === 'pending');
-    }
+    const r = await SUPA.getUsers();
+    const pending = r.ok ? (r.users || []).filter(u => u.status === 'pending') : [];
 
     if (!pending.length) { el.innerHTML = '<p class="info-text">Nenhum cadastro pendente.</p>'; return; }
     el.innerHTML = pending.map(u => `
@@ -922,7 +913,7 @@ Object.assign(APP, {
         <div class="pending-info">
           <div class="pending-name">${u.username} <span class="badge-pending">Pendente</span></div>
           <div class="pending-email">${u.email}</div>
-          <div style="font-size:0.75rem;color:var(--gray-400)">Solicitado em ${new Date(u.createdAt).toLocaleDateString('pt-BR')}</div>
+          <div style="font-size:0.75rem;color:var(--gray-400)">Solicitado em ${new Date(u.created_at).toLocaleDateString('pt-BR')}</div>
         </div>
         <div class="pending-actions">
           <button class="btn btn-sm btn-success" onclick="APP.approveUser('${u.username}')"><i class="fas fa-check"></i> Aprovar</button>
@@ -931,21 +922,15 @@ Object.assign(APP, {
       </div>`).join('');
   },
 
-  approveUser(username) {
-    const users = SHEETS.local.getUsers();
-    const u = users.find(u => u.username === username);
-    if (u) { u.status = 'approved'; SHEETS.local.saveUsers(users); }
-    if (isSheetsConfigured()) SHEETS.approveUser(username);
+  async approveUser(username) {
+    await SUPA.updateUserStatus(username, 'approved');
     document.getElementById(`pend-${username}`)?.remove();
     showToast(`${username} aprovado!`, 'success');
     this._loadPendentes();
   },
 
-  rejectUser(username) {
-    const users = SHEETS.local.getUsers();
-    const u = users.find(u => u.username === username);
-    if (u) { u.status = 'rejected'; SHEETS.local.saveUsers(users); }
-    if (isSheetsConfigured()) SHEETS.rejectUser(username);
+  async rejectUser(username) {
+    await SUPA.updateUserStatus(username, 'rejected');
     document.getElementById(`pend-${username}`)?.remove();
     showToast(`${username} recusado.`);
     this._loadPendentes();
@@ -954,15 +939,8 @@ Object.assign(APP, {
   async _loadUsuarios() {
     const el = document.getElementById('usuariosList');
     el.innerHTML = '<div class="loading-spinner"><i class="fas fa-futbol fa-spin"></i></div>';
-
-    let users = [];
-    if (isSheetsConfigured()) {
-      const res = await SHEETS.getUsers();
-      if (res?.ok && res.users) users = res.users.filter(u => u.status === 'approved');
-    } else {
-      users = SHEETS.local.getUsers().filter(u => u.status === 'approved');
-    }
-
+    const r = await SUPA.getUsers();
+    const users = r.ok ? (r.users || []).filter(u => u.status === 'approved') : [];
     if (!users.length) { el.innerHTML = '<p class="info-text">Nenhum usuário ativo.</p>'; return; }
     el.innerHTML = users.map(u => `
       <div class="user-item">
@@ -1012,13 +990,19 @@ Object.assign(APP, {
 document.addEventListener('DOMContentLoaded', () => {
   AUTH.init();
 
-  // Sincroniza notas do Sheets para localStorage
-  if (isSheetsConfigured()) {
-    SHEETS.syncGameScores().then(() => {
-      // Se já estiver na página de rankings, recarrega
-      if (APP.currentPage === 'rankings') APP.loadRankings();
-    });
-  }
+  // Sync game scores from Supabase on startup
+  SUPA.getAllGameScores().then(r => {
+    if (r.ok && r.scores?.length) {
+      localStorage.setItem('js_sheetsScores', JSON.stringify(r.scores));
+      const gs = {};
+      r.scores.forEach(s => {
+        if (!gs[s.fixture_id]) gs[s.fixture_id] = {};
+        if (!gs[s.fixture_id][s.player_id]) gs[s.fixture_id][s.player_id] = {};
+        gs[s.fixture_id][s.player_id][s.username] = parseFloat(s.score);
+      });
+      localStorage.setItem('js_gameScores', JSON.stringify(gs));
+    }
+  });
 
   document.querySelectorAll('.nav-link').forEach(link => {
     link.addEventListener('click', e => { e.preventDefault(); APP.navigate(link.dataset.page); });
@@ -1147,12 +1131,8 @@ Object.assign(APP, {
     el.innerHTML = '<div class="loading-spinner"><i class="fas fa-futbol fa-spin"></i> Carregando jogos...</div>';
 
     let fixtures = [];
-    if (isSheetsConfigured()) {
-      try {
-        const res = await SHEETS.request('getFixtures');
-        if (res?.ok && res.jogos?.length) fixtures = res.jogos;
-      } catch(e) { console.warn(e); }
-    }
+    const r = await SUPA.getFixtures();
+    if (r.ok && r.jogos?.length) fixtures = r.jogos;
 
     // Mescla com jogos manuais do localStorage
     const manuais = this._getManualJogos();
@@ -1249,9 +1229,7 @@ Object.assign(APP, {
 
   async _toggleLiberacaoSheets(jogoId, isCurrentlyLiberated) {
     const novo = !isCurrentlyLiberated;
-    if (isSheetsConfigured()) {
-      await SHEETS.request('updateJogoLiberado', { jogoId, liberado: novo });
-    }
+    await SUPA.updateFixtureLiberado(jogoId, novo);
     if (this._adminJogosAll) {
       const j = this._adminJogosAll.find(x => x.id === jogoId);
       if (j) j.liberado = novo;
@@ -1391,18 +1369,18 @@ Object.assign(APP, {
     catch { return {}; }
   },
 
-  _salvarEscalacao() {
+  async _salvarEscalacao() {
     if (!this._currentAdminJogoId) return;
     const selected = [...document.querySelectorAll('.escalacao-card.selected')]
       .map(c => c.id.replace('esc-', ''));
 
+    // Save locally
     const escalacoes = this._getEscalacoes();
     escalacoes[this._currentAdminJogoId] = selected;
     localStorage.setItem('js_escalacoes', JSON.stringify(escalacoes));
 
-    if (isSheetsConfigured()) {
-      SHEETS.request('saveEscalacao', { jogoId: this._currentAdminJogoId, playerIds: selected });
-    }
+    // Save to Supabase
+    await SUPA.saveEscalacao(this._currentAdminJogoId, selected);
 
     showToast(`Escalação salva: ${selected.length} jogadores`, 'success');
   },
@@ -1509,32 +1487,18 @@ Object.assign(APP, {
     if (!slider) return;
     const nota     = parseFloat(slider.value);
     const username = AUTH.getUsername();
-    const key      = `js_notaperm_${year}`;
 
-    // Salva localmente (por usuário)
+    const r = await SUPA.savePermanentScore(String(playerId), playerName, username, year, nota);
+    if (!r.ok) { showToast(r.error || 'Erro ao salvar nota', 'error'); return; }
+
+    // Update localStorage cache
+    const key = `js_notaperm_${year}`;
     const existing = JSON.parse(localStorage.getItem(key) || '{}');
     existing[playerId] = nota;
     localStorage.setItem(key, JSON.stringify(existing));
 
-    // Salva no Sheets
-    if (isSheetsConfigured()) {
-      await SHEETS.request('saveNotaPermanente', { playerId, playerName, username, year, nota });
-    }
-
-    // Atualiza mainScores local para refletir nova média
-    const allNotes = this._getAllPermNotes(playerId, year);
-    const avg = allNotes.length
-      ? (allNotes.reduce((a, b) => a + b, 0) / allNotes.length).toFixed(1)
-      : nota.toFixed(1);
-
-    const ms = SHEETS.local.getMainScores();
-    ms[playerId] = { avg: parseFloat(avg), votes: allNotes.length };
-    localStorage.setItem('js_mainScores', JSON.stringify(ms));
-
     document.getElementById('modalNotaPrincipal').classList.remove('open');
     showToast(`Nota permanente ${nota} salva para ${playerName}!`, 'success');
-
-    // Recarrega elenco para atualizar as cartas
     this.loadElenco();
   },
 
@@ -1634,31 +1598,19 @@ Object.assign(APP, {
     const isEdit = this._elencoEditId !== null;
 
     if (isEdit) {
-      // Edição
-      if (isSheetsConfigured()) {
-        const res = await SHEETS.request('updatePlayer', { id, name: nome, position: pos, number: num, photo: foto, nationality: nac });
-        if (!res.ok) { showToast(res.error || 'Erro ao salvar', 'error'); return; }
-      }
-      // Atualiza localmente
+      const r = await SUPA.updatePlayer(id, { name: nome, position: pos, number: num, photo: foto, nationality: nac });
+      if (!r.ok) { showToast(r.error || 'Erro ao salvar', 'error'); return; }
       const idx = this.squad.findIndex(p => String(p.id) === String(id));
-      if (idx >= 0) {
-        this.squad[idx] = { ...this.squad[idx], name: nome, position: pos, number: num, photo: foto, nationality: nac };
-      }
+      if (idx >= 0) this.squad[idx] = { ...this.squad[idx], name: nome, position: pos, number: num, photo: foto, nationality: nac };
       showToast(`${nome} atualizado!`, 'success');
     } else {
-      // Novo jogador
-      if (this.squad.find(p => String(p.id) === String(id))) {
-        showToast('Jogador já existe. Clique em ✏️ para editar.', 'error'); return;
-      }
-      if (isSheetsConfigured()) {
-        const res = await SHEETS.request('addPlayer', { id, name: nome, position: pos, number: num, photo: foto, nationality: nac });
-        if (!res.ok) { showToast(res.error || 'Erro ao adicionar', 'error'); return; }
-      }
+      if (this.squad.find(p => String(p.id) === String(id))) { showToast('Jogador já existe. Clique em ✏️ para editar.', 'error'); return; }
+      const r = await SUPA.addPlayer({ id, name: nome, position: pos, number: num, photo: foto, nationality: nac, manual: true });
+      if (!r.ok) { showToast(r.error || 'Erro ao adicionar', 'error'); return; }
       this.squad.push({ id, name: nome, position: pos, number: num, photo: foto, nationality: nac, manual: true });
       showToast(`${nome} adicionado!`, 'success');
     }
 
-    // Reseta formulário
     document.getElementById('elencoId').value          = '';
     document.getElementById('elencoId').disabled       = false;
     document.getElementById('elencoNome').value        = '';
@@ -1669,32 +1621,20 @@ Object.assign(APP, {
     btn.innerHTML = '<i class="fas fa-plus"></i> Adicionar ao Elenco';
     btn.style.background = '';
     this._elencoEditId = null;
-
     this._renderAdminElenco();
   },
 
   async _removerJogador(id, nome) {
     if (!confirm(`Remover ${nome} do elenco?`)) return;
-
-    if (isSheetsConfigured()) {
-      // Tenta remover — se não for manual, força remoção marcando como deletado
-      const res = await SHEETS.request('removePlayer', { id, force: true });
-      if (!res.ok) { showToast(res.error || 'Erro ao remover', 'error'); return; }
-    }
-
+    const r = await SUPA.deletePlayer(id);
+    if (!r.ok) { showToast(r.error || 'Erro ao remover', 'error'); return; }
     this.squad = this.squad.filter(p => String(p.id) !== String(id));
     showToast(`${nome} removido.`);
     this._renderAdminElenco();
   },
 
   async _recarregarElenco() {
-    const el = document.getElementById('adminElencoList');
-    el.innerHTML = '<div class="loading-spinner"><i class="fas fa-futbol fa-spin"></i> Recarregando...</div>';
-
-    if (isSheetsConfigured()) {
-      await SHEETS.request('refreshSquad');
-    }
-
+    document.getElementById('adminElencoList').innerHTML = '<div class="loading-spinner"><i class="fas fa-futbol fa-spin"></i></div>';
     this.squad = await API.getSquad();
     showToast('Elenco recarregado!', 'success');
     this._renderAdminElenco();
