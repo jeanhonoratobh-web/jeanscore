@@ -1,0 +1,54 @@
+/**
+ * NotFoundPage styles — Design_Tokens only (Requirement 3.4).
+ *
+ * No literal colors, spacing, radii, shadows or durations: every visual value
+ * is a `var(--token)` from `theme/tokens.css`.
+ */
+
+.page {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-4);
+  min-height: 60vh;
+  padding: var(--space-8) var(--space-4);
+  text-align: center;
+}
+
+.code {
+  margin: 0;
+  font-family: var(--font-family-display);
+  font-size: var(--font-display-size);
+  line-height: var(--font-display-line);
+  font-weight: var(--font-display-weight);
+  color: var(--color-primary);
+}
+
+.title {
+  margin: 0;
+  font-family: var(--font-family-base);
+  font-size: var(--font-h2-size);
+  line-height: var(--font-h2-line);
+  font-weight: var(--font-h2-weight);
+  color: var(--color-text);
+}
+
+.link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-3) var(--space-5);
+  border-radius: var(--radius-md);
+  background-color: var(--color-primary);
+  color: var(--color-text-inverse);
+  font-family: var(--font-family-base);
+  font-size: var(--font-body-size);
+  font-weight: var(--font-h3-weight);
+  text-decoration: none;
+  transition: background-color var(--duration-fast) ease;
+}
+
+.link:hover {
+  background-color: var(--color-primary-strong);
+}

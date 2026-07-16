@@ -1,0 +1,19 @@
+/**
+ * Shared chart wrapper styling — Design_Tokens only (Requirements 29.5, 29.6).
+ *
+ * Provides a responsive, fixed-height container so Recharts' ResponsiveContainer
+ * can measure its parent. On mobile (< 480px) the height drops to the 200px
+ * minimum required by Requirement 29.6.
+ */
+
+.wrapper {
+  width: 100%;
+  height: 320px;
+}
+
+@media (max-width: 480px) {
+  .wrapper {
+    height: 200px;
+    overflow-x: auto;
+  }
+}

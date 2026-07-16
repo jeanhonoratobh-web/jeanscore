@@ -1,0 +1,160 @@
+/**
+ * Navigation styles — Design_Tokens only (Requirement 3.4).
+ *
+ * No literal colors, spacing, radii, shadows or durations: every visual value
+ * is a `var(--token)` from `theme/tokens.css`.
+ */
+
+.header {
+  position: sticky;
+  top: 0;
+  z-index: var(--z-sticky-header);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  background-color: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+  box-shadow: var(--shadow-1);
+}
+
+.brand {
+  font-family: var(--font-family-display);
+  font-size: var(--font-h2-size);
+  font-weight: var(--font-h2-weight);
+  line-height: var(--font-h2-line);
+  color: var(--color-primary);
+  text-decoration: none;
+}
+
+.hamburger {
+  display: none;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-2);
+  background-color: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+
+.hamburger:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.hamburgerBar {
+  width: var(--space-5);
+  height: 2px;
+  background-color: var(--color-text);
+  border-radius: var(--radius-full);
+}
+
+.nav {
+  display: flex;
+  align-items: center;
+  gap: var(--space-5);
+}
+
+.list {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.item {
+  display: flex;
+}
+
+.link {
+  display: inline-flex;
+  align-items: center;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  font-family: var(--font-family-base);
+  font-size: var(--font-body-size);
+  font-weight: var(--font-h3-weight);
+  line-height: var(--font-body-line);
+  color: var(--color-text);
+  text-decoration: none;
+  transition:
+    background-color var(--duration-fast) var(--ease-standard),
+    color var(--duration-fast) var(--ease-standard);
+}
+
+.link:hover {
+  background-color: var(--color-primary-soft);
+  color: var(--color-primary);
+}
+
+.link:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.linkActive {
+  color: var(--color-primary);
+  background-color: var(--color-primary-soft);
+  font-weight: var(--font-h2-weight);
+}
+
+.session {
+  display: flex;
+  align-items: center;
+}
+
+.greeting {
+  font-family: var(--font-family-base);
+  font-size: var(--font-body-sm-size);
+  font-weight: var(--font-caption-weight);
+  color: var(--color-text-muted);
+}
+
+/* -------------------------------------------------------------------------
+   Mobile: collapse links behind the hamburger toggle.
+   ------------------------------------------------------------------------- */
+@media (max-width: 768px) {
+  .hamburger {
+    display: inline-flex;
+  }
+
+  .nav {
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--space-3);
+    padding: var(--space-4);
+    background-color: var(--color-surface);
+    border-bottom: 1px solid var(--color-border);
+    box-shadow: var(--shadow-2);
+  }
+
+  .navOpen {
+    display: flex;
+  }
+
+  .list {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--space-1);
+  }
+
+  .link {
+    width: 100%;
+  }
+}
+
+/* Requirement 30.7: disable non-essential animation under reduced motion. */
+@media (prefers-reduced-motion: reduce) {
+  .link {
+    transition-duration: 50ms;
+  }
+}

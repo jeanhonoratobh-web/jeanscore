@@ -1,0 +1,278 @@
+/**
+ * PerfilPage styles — Design_Tokens only (Requirement 3.4).
+ *
+ * No literal colors, spacing, radii, shadows or durations: every visual value
+ * is a `var(--token)` from `theme/tokens.css`. Lays out the personal profile as
+ * a vertical stack of token-styled section cards, each hosting reusable
+ * components (StatCard, AchievementCard, Badge) from the library (Requirement
+ * 8).
+ */
+
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  padding: var(--space-5) var(--space-4);
+  max-width: 1200px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+/* --- Identity + "Membro Desde" ----------------------------------------- */
+
+.identity {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-5) var(--space-4);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-1);
+}
+
+.username {
+  margin: 0;
+  font-family: var(--font-family-display);
+  font-size: var(--font-h1-size);
+  line-height: var(--font-h1-line);
+  font-weight: var(--font-h1-weight);
+  color: var(--color-text);
+}
+
+.memberSince {
+  margin: 0;
+  font-size: var(--font-body-sm-size);
+  color: var(--color-text-muted);
+}
+
+/* --- Section shell ------------------------------------------------------ */
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-1);
+}
+
+.sectionTitle {
+  margin: 0;
+  font-family: var(--font-family-display);
+  font-size: var(--font-h3-size);
+  line-height: var(--font-h3-line);
+  font-weight: var(--font-h3-weight);
+  color: var(--color-text);
+}
+
+/* --- Personal statistics ----------------------------------------------- */
+
+.statsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: var(--space-3);
+}
+
+.favoriteCard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-4);
+  background: var(--color-surface-2);
+  border-radius: var(--radius-md);
+}
+
+.favoriteLabel {
+  font-size: var(--font-caption-size);
+  line-height: var(--font-caption-line);
+  font-weight: var(--font-caption-weight);
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.favoriteLink {
+  font-family: var(--font-family-display);
+  font-size: var(--font-h3-size);
+  font-weight: var(--font-h3-weight);
+  color: var(--color-primary);
+  text-decoration: none;
+}
+
+.favoriteLink:hover {
+  text-decoration: underline;
+}
+
+.favoriteLink:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.favoriteNone {
+  font-size: var(--font-body-sm-size);
+  color: var(--color-text-muted);
+}
+
+/* --- Fan Score + level + progress -------------------------------------- */
+
+.fanScore {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.fanScoreHeader {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.fanScoreValue {
+  font-family: var(--font-family-display);
+  font-size: var(--font-h1-size);
+  line-height: var(--font-h1-line);
+  font-weight: var(--font-h1-weight);
+  color: var(--color-text);
+}
+
+.progressTrack {
+  width: 100%;
+  height: var(--space-2);
+  background: var(--color-surface-2);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+}
+
+.progressFill {
+  height: 100%;
+  background: var(--color-primary);
+  border-radius: var(--radius-full);
+  transition: width var(--duration-base) var(--ease-standard);
+}
+
+.progressLabel {
+  margin: 0;
+  font-size: var(--font-body-sm-size);
+  color: var(--color-text-muted);
+}
+
+/* --- Achievements ------------------------------------------------------- */
+
+.achievementsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: var(--space-3);
+}
+
+/* --- Badges ------------------------------------------------------------- */
+
+.badgesRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+/* --- Recent activity ---------------------------------------------------- */
+
+.activityList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.activityItem {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-surface-2);
+  border-radius: var(--radius-md);
+}
+
+.activityPlayer {
+  flex: 1 1 auto;
+  font-size: var(--font-body-sm-size);
+  font-weight: var(--font-h3-weight);
+  color: var(--color-primary);
+  text-decoration: none;
+}
+
+.activityPlayer:hover {
+  text-decoration: underline;
+}
+
+.activityPlayer:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.activityMatch {
+  font-size: var(--font-caption-size);
+  color: var(--color-text-muted);
+  text-decoration: none;
+}
+
+.activityMatch:hover {
+  text-decoration: underline;
+}
+
+.activityMatch:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.activityScore {
+  font-family: var(--font-family-display);
+  font-size: var(--font-body-size);
+  font-weight: var(--font-h3-weight);
+  color: var(--color-text);
+  min-width: 3ch;
+  text-align: right;
+}
+
+/* --- Activity timeline -------------------------------------------------- */
+
+.timeline {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.timelineItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-surface-2);
+  border-radius: var(--radius-md);
+  border-left: 3px solid var(--color-primary);
+}
+
+.timelineLabel {
+  font-size: var(--font-body-sm-size);
+  color: var(--color-text);
+}
+
+.timelineDate {
+  font-size: var(--font-caption-size);
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+@media (max-width: 600px) {
+  .statsGrid,
+  .achievementsGrid {
+    grid-template-columns: 1fr;
+  }
+}

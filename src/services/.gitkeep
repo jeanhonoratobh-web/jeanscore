@@ -1,0 +1,1 @@
+# Data-access layer (dependency injection: SupabaseClient + Cache).

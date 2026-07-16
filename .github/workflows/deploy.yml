@@ -14,14 +14,39 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  deploy:
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+  # ---------------------------------------------------------------------------
+  # Build gate (Requirement 1.9): typecheck -> lint -> tests, in this order,
+  # BEFORE `vite build`. Each step runs as its own GitHub Actions step, so any
+  # non-zero exit fails the job and blocks the deploy job below (which `needs`
+  # this one). Static artifacts are only produced from code that type-checks,
+  # passes lint and satisfies the test suite.
+  # ---------------------------------------------------------------------------
+  build:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck (tsc --noEmit)
+        run: npm run typecheck
+
+      - name: Lint (eslint)
+        run: npm run lint
+
+      - name: Test (vitest run)
+        run: npm run test
+
+      - name: Build (vite build)
+        run: npm run build
 
       - name: Setup Pages
         uses: actions/configure-pages@v4
@@ -29,8 +54,23 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: '.'
+          # Only the Vite build output is published. `dist/` contains the SPA
+          # entry (index.html), the hashed assets that resolve under the
+          # configured `base` subpath, and the SPA fallback `404.html`
+          # (copied from `public/`) that preserves deep-link paths on
+          # GitHub Pages (Requirements 12.3, 12.4).
+          path: 'dist'
 
+  # ---------------------------------------------------------------------------
+  # Deploy only runs when the build gate above succeeds (`needs: build`).
+  # ---------------------------------------------------------------------------
+  deploy:
+    needs: build
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4

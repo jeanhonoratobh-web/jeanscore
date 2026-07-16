@@ -1,0 +1,21 @@
+/**
+ * AppShell styles — Design_Tokens only (Requirement 3.4).
+ *
+ * No literal colors, spacing or sizes: every visual value is a `var(--token)`
+ * from `theme/tokens.css`. The shell is a full-height column so the themed
+ * background (applied on `body`) fills the viewport and the `<main>` grows to
+ * take the remaining space below the sticky header.
+ */
+
+.shell {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  background-color: var(--color-bg);
+  color: var(--color-text);
+}
+
+.main {
+  flex: 1 1 auto;
+  width: 100%;
+}

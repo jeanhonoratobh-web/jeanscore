@@ -1,0 +1,42 @@
+/**
+ * Global base styles (Requirements 4.7, 33.3, 33.5).
+ *
+ * Imported once in `main.tsx` after `tokens.css`, this file applies the themed
+ * surface to the document so every Theme's `--color-bg`/`--color-text` pairing
+ * actually paints the page (and thus honours the WCAG AA contrast guaranteed by
+ * the tokens — Requirements 4.7, 33.5), and provides a keyboard focus-visible
+ * baseline so any interactive element without its own focus ring still shows a
+ * clearly visible outline (Requirement 33.3).
+ *
+ * Only design-token values are used here — no literal colors, sizes or
+ * durations (Requirement 3.4). Component-level rules may override these
+ * defaults; this is intentionally the lowest-specificity safety net.
+ */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background-color: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-family-base);
+  font-size: var(--font-body-size);
+  line-height: var(--font-body-line);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Keyboard focus baseline: visible ring for any focusable element that does not
+   define its own focus-visible style (Requirement 33.3). */
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}

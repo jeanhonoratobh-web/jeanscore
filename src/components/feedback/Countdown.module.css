@@ -1,0 +1,69 @@
+/**
+ * Countdown styling — Design_Tokens only (Requirement 3.4).
+ *
+ * A row of day/hour/minute/second segments. Digit changes use a subtle
+ * vertical flip (Requirement 30.5) that is disabled under
+ * `prefers-reduced-motion: reduce` (Requirement 30.7).
+ */
+
+.root {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  gap: var(--space-4);
+}
+
+.segment {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: var(--space-8);
+}
+
+.value {
+  font-family: var(--font-family-display);
+  font-size: var(--font-h1-size);
+  line-height: var(--font-h1-line);
+  font-weight: var(--font-display-weight);
+  color: var(--color-primary);
+  font-variant-numeric: tabular-nums;
+  animation: flip var(--duration-base) var(--ease-emphasized);
+}
+
+.label {
+  font-family: var(--font-family-base);
+  font-size: var(--font-caption-size);
+  line-height: var(--font-caption-line);
+  font-weight: var(--font-caption-weight);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-muted);
+}
+
+.live {
+  margin: 0;
+  font-family: var(--font-family-display);
+  font-size: var(--font-h2-size);
+  line-height: var(--font-h2-line);
+  font-weight: var(--font-h2-weight);
+  color: var(--color-accent);
+  text-align: center;
+}
+
+@keyframes flip {
+  from {
+    transform: rotateX(-90deg);
+    opacity: 0.4;
+  }
+  to {
+    transform: rotateX(0);
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .value {
+    animation: none;
+  }
+}

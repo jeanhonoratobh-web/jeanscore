@@ -1,0 +1,217 @@
+/**
+ * TimeDoMesPage styles.
+ *
+ * Styled exclusively through Design_Tokens (CSS Custom Properties) per
+ * Requirement 3.4 — no hardcoded colors, spacing, radii, shadows or durations.
+ * Lays out the period selectors, a tactical pitch of PlayerCards (attack on top
+ * down to the goalkeeper) and the team statistics for the Time da Comunidade do
+ * Mês (Requirement 25).
+ */
+
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  padding: var(--space-5) var(--space-4);
+  max-width: 1200px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.title {
+  font-family: var(--font-family-display);
+  font-size: var(--font-h1-size);
+  line-height: var(--font-h1-line);
+  font-weight: var(--font-h1-weight);
+  color: var(--color-text);
+  margin: 0;
+}
+
+.subtitle {
+  font-size: var(--font-body-size);
+  line-height: var(--font-body-line);
+  color: var(--color-text-muted);
+  margin: 0;
+}
+
+/* --- Period selectors --------------------------------------------------- */
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-1);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 200px;
+}
+
+.fieldLabel {
+  font-size: var(--font-caption-size);
+  line-height: var(--font-caption-line);
+  font-weight: var(--font-caption-weight);
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.select {
+  appearance: none;
+  font-family: var(--font-family-base);
+  font-size: var(--font-body-sm-size);
+  color: var(--color-text);
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-2) var(--space-3);
+  cursor: pointer;
+  transition: border-color var(--duration-fast) var(--ease-standard);
+}
+
+.select:hover {
+  border-color: var(--color-primary);
+}
+
+.select:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.spacer {
+  flex: 1 1 auto;
+}
+
+/* --- Period summary ----------------------------------------------------- */
+
+.periodSummary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.periodMonth {
+  font-family: var(--font-family-display);
+  font-size: var(--font-h3-size);
+  font-weight: var(--font-h3-weight);
+  color: var(--color-text);
+  text-transform: capitalize;
+}
+
+.periodAll {
+  font-size: var(--font-body-sm-size);
+  color: var(--color-text-muted);
+}
+
+.formationName {
+  margin-left: auto;
+  font-family: var(--font-family-display);
+  font-size: var(--font-body-size);
+  font-weight: var(--font-h3-weight);
+  color: var(--color-primary);
+  letter-spacing: 0.08em;
+}
+
+/* --- Tactical pitch ----------------------------------------------------- */
+
+.pitch {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  padding: var(--space-5) var(--space-4);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-1);
+}
+
+.pitchRow {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-4);
+}
+
+.cardLink {
+  display: block;
+  width: 160px;
+  text-decoration: none;
+  color: inherit;
+  border-radius: var(--radius-lg);
+}
+
+.cardLink:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 3px;
+}
+
+.emptySlot {
+  width: 160px;
+  min-height: 120px;
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-lg);
+}
+
+.skeletonPitch {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: var(--space-4);
+  padding: var(--space-5) var(--space-4);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+
+/* --- Team statistics ---------------------------------------------------- */
+
+.stats {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.statsTitle {
+  font-family: var(--font-family-display);
+  font-size: var(--font-h2-size);
+  line-height: var(--font-h2-line);
+  font-weight: var(--font-h2-weight);
+  color: var(--color-text);
+  margin: 0;
+}
+
+.statsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--space-4);
+}
+
+@media (max-width: 600px) {
+  .controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .field {
+    min-width: 0;
+  }
+
+  .cardLink,
+  .emptySlot {
+    width: 130px;
+  }
+}

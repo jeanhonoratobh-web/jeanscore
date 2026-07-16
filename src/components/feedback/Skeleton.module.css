@@ -1,0 +1,75 @@
+/**
+ * Skeleton styling — Design_Tokens only (Requirement 3.4).
+ *
+ * Loading placeholders that mimic the shape of forthcoming content. The
+ * shimmer animation is non-essential and is disabled under
+ * `prefers-reduced-motion: reduce` (Requirement 30.7).
+ */
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.item {
+  position: relative;
+  overflow: hidden;
+  background-color: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+/* Shape: card — tall block echoing a Carta_FIFA. */
+.card {
+  aspect-ratio: 3 / 4;
+  width: 100%;
+}
+
+/* Shape: chart — wide block echoing a graph panel. */
+.chart {
+  height: 200px;
+  width: 100%;
+  border-radius: var(--radius-lg);
+}
+
+/* Shape: text — a slim line of text. */
+.text {
+  height: var(--font-body-size);
+  width: 100%;
+  border-radius: var(--radius-sm);
+}
+
+/* Shape: list row — a medium row echoing a list item. */
+.row {
+  height: var(--space-7);
+  width: 100%;
+}
+
+/* Shimmer sweep built from surface tokens (no hardcoded colors). */
+.item::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background-image: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--color-surface) 50%,
+    transparent 100%
+  );
+  opacity: 0.6;
+  animation: shimmer var(--duration-count) var(--ease-standard) infinite;
+}
+
+@keyframes shimmer {
+  to {
+    transform: translateX(100%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .item::after {
+    animation: none;
+  }
+}

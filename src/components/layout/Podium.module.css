@@ -1,0 +1,106 @@
+/**
+ * Podium styles — Design_Tokens only (Requirement 3.4).
+ *
+ * No literal colors, spacing, radii, shadows or durations: every visual value
+ * is a `var(--token)` from `theme/tokens.css`. The `.hidden` → `.visible`
+ * transition is the scroll entrance animation (Requirement 26.2), disabled
+ * under reduced motion (Requirement 30.7).
+ */
+
+.podium {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: var(--space-3);
+  margin: 0;
+  padding: var(--space-4);
+  list-style: none;
+}
+
+/* Scroll entrance animation (Requirement 26.2). */
+.hidden {
+  opacity: 0;
+  transform: translateY(var(--space-5));
+  transition:
+    opacity var(--duration-slow) var(--ease-standard),
+    transform var(--duration-slow) var(--ease-emphasized);
+}
+
+.visible {
+  opacity: 1;
+  transform: translateY(0);
+  transition:
+    opacity var(--duration-slow) var(--ease-standard),
+    transform var(--duration-slow) var(--ease-emphasized);
+}
+
+.step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-1);
+  width: var(--space-8);
+  padding: var(--space-4) var(--space-2);
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-1);
+  text-align: center;
+}
+
+/* 1st place: centre, raised and emphasized with the accent/gold treatment. */
+.first {
+  order: 2;
+  padding-top: var(--space-6);
+  padding-bottom: var(--space-6);
+  border-color: var(--color-accent);
+  box-shadow: var(--shadow-glow);
+}
+
+.second {
+  order: 1;
+  padding-top: var(--space-5);
+  padding-bottom: var(--space-5);
+}
+
+.third {
+  order: 3;
+}
+
+.rank {
+  font-family: var(--font-family-display);
+  font-size: var(--font-h1-size);
+  font-weight: var(--font-display-weight);
+  line-height: var(--font-h1-line);
+  color: var(--color-primary);
+}
+
+.name {
+  font-size: var(--font-body-size);
+  font-weight: var(--font-h3-weight);
+  line-height: var(--font-body-line);
+  color: var(--color-text);
+}
+
+.avg {
+  font-family: var(--font-family-display);
+  font-size: var(--font-h2-size);
+  font-weight: var(--font-h1-weight);
+  color: var(--color-accent-strong);
+}
+
+.votes {
+  font-size: var(--font-caption-size);
+  line-height: var(--font-caption-line);
+  color: var(--color-text-muted);
+}
+
+/* Requirement 30.7: disable non-essential animation under reduced motion. */
+@media (prefers-reduced-motion: reduce) {
+  .hidden,
+  .visible {
+    transition-duration: 50ms;
+    opacity: 1;
+    transform: none;
+  }
+}

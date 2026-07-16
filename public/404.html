@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>JeanScore</title>
+  <!--
+    SPA routing fallback for GitHub Pages (Requirements 12.3, 12.4).
+
+    GitHub Pages has no server-side rewrite, so a direct hit on a deep link
+    such as `/jeanscore/jogador/123` returns this 404 page. The script below
+    encodes the requested path (and query/hash) into a single query string and
+    redirects to the app entry (`index.html`) at the repository base. The
+    matching decoder in `index.html` restores the original URL before React
+    Router boots, so the path is preserved and the back button works.
+
+    `pathSegmentsToKeep` must equal the number of path segments in the Vite
+    `base` subpath. The GitHub Pages deployment uses `base: '/jeanscore/'`
+    (see `vite.config.ts`), which is a single segment, so it is set to 1.
+  -->
+  <script>
+    (function () {
+      var pathSegmentsToKeep = 1;
+      var l = window.location;
+      l.replace(
+        l.protocol +
+          '//' +
+          l.hostname +
+          (l.port ? ':' + l.port : '') +
+          l.pathname
+            .split('/')
+            .slice(0, 1 + pathSegmentsToKeep)
+            .join('/') +
+          '/?/' +
+          l.pathname
+            .slice(1)
+            .split('/')
+            .slice(pathSegmentsToKeep)
+            .join('/')
+            .replace(/&/g, '~and~') +
+          (l.search ? '&' + l.search.slice(1).replace(/&/g, '~and~') : '') +
+          l.hash
+      );
+    })();
+  </script>
+</head>
+<body>Redirecionando...</body>
+</html>

@@ -1,0 +1,241 @@
+/**
+ * RankingsPage styles — Design_Tokens only (Requirement 3.4).
+ *
+ * No literal colors, spacing, radii, shadows or durations: every visual value
+ * is a `var(--token)` from `theme/tokens.css`, so the page re-themes with the
+ * rest of the product (Requirement 4.2).
+ */
+
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  width: 100%;
+  max-width: 960px;
+  margin: 0 auto;
+  padding: var(--space-5) var(--space-4);
+}
+
+.title {
+  font-family: var(--font-family-display);
+  font-size: var(--font-h1-size);
+  font-weight: var(--font-h1-weight);
+  line-height: var(--font-h1-line);
+  color: var(--color-text);
+  margin: 0;
+}
+
+/* Controls: competition filter + name search ----------------------------- */
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.filterLabel {
+  font-size: var(--font-caption-size);
+  font-weight: var(--font-caption-weight);
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
+  margin-right: var(--space-2);
+}
+
+.chip {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  font-family: var(--font-family-base);
+  font-size: var(--font-body-sm-size);
+  color: var(--color-text);
+  cursor: pointer;
+  transition: background-color var(--duration-fast) var(--ease-standard),
+    border-color var(--duration-fast) var(--ease-standard),
+    color var(--duration-fast) var(--ease-standard);
+}
+
+.chip:hover {
+  border-color: var(--color-primary);
+}
+
+.chip[aria-pressed='true'] {
+  background-color: var(--color-primary);
+  border-color: var(--color-primary);
+  color: var(--color-text-inverse);
+}
+
+.chip:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.searchField {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 220px;
+}
+
+.searchLabel {
+  font-size: var(--font-caption-size);
+  font-weight: var(--font-caption-weight);
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
+}
+
+.searchInput {
+  appearance: none;
+  font-family: var(--font-family-base);
+  font-size: var(--font-body-sm-size);
+  color: var(--color-text);
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-2) var(--space-3);
+  transition: border-color var(--duration-fast) var(--ease-standard);
+}
+
+.searchInput:hover {
+  border-color: var(--color-primary);
+}
+
+.searchInput:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+/* Categories -------------------------------------------------------------- */
+
+.categories {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.category {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.categoryTitle {
+  font-family: var(--font-family-display);
+  font-size: var(--font-h2-size);
+  font-weight: var(--font-h2-weight);
+  line-height: var(--font-h2-line);
+  color: var(--color-text);
+  margin: 0;
+}
+
+.list {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-2);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.item {
+  display: block;
+}
+
+.rowLink {
+  display: block;
+  text-decoration: none;
+  color: inherit;
+  border-radius: var(--radius-md);
+  transition: box-shadow var(--duration-fast) var(--ease-standard);
+}
+
+.rowLink:hover {
+  box-shadow: var(--shadow-2);
+}
+
+.rowLink:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+/* Best-rated match rows --------------------------------------------------- */
+
+.matchRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.matchRank {
+  font-family: var(--font-family-display);
+  font-size: var(--font-h3-size);
+  font-weight: var(--font-h3-weight);
+  color: var(--color-text-muted);
+  min-width: 2ch;
+  text-align: center;
+}
+
+.matchIdentity {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.matchTeams {
+  font-size: var(--font-body-size);
+  font-weight: var(--font-h3-weight);
+  color: var(--color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.matchMetrics {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--space-1);
+}
+
+.matchAvg {
+  font-family: var(--font-family-display);
+  font-size: var(--font-h3-size);
+  font-weight: var(--font-h3-weight);
+  color: var(--color-primary);
+}
+
+.matchVotes {
+  font-size: var(--font-caption-size);
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+@media (max-width: 600px) {
+  .controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .searchField {
+    min-width: 0;
+  }
+}

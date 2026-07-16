@@ -1,0 +1,138 @@
+/**
+ * Button styles — Design_Tokens only (Requirement 3.4).
+ *
+ * No literal colors, spacing, radii, shadows or durations: every visual value
+ * is a `var(--token)` from `theme/tokens.css`.
+ */
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  font-family: var(--font-family-base);
+  font-size: var(--font-body-size);
+  font-weight: var(--font-h3-weight);
+  line-height: var(--font-body-line);
+  cursor: pointer;
+  user-select: none;
+  transition:
+    background-color var(--duration-fast) var(--ease-standard),
+    color var(--duration-fast) var(--ease-standard),
+    border-color var(--duration-fast) var(--ease-standard),
+    box-shadow var(--duration-fast) var(--ease-standard);
+}
+
+.button:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+/* -------------------------------------------------------------------------
+   Sizes
+   ------------------------------------------------------------------------- */
+.sm {
+  padding: var(--space-1) var(--space-3);
+  font-size: var(--font-body-sm-size);
+}
+
+.md {
+  padding: var(--space-2) var(--space-4);
+}
+
+.lg {
+  padding: var(--space-3) var(--space-5);
+  font-size: var(--font-h3-size);
+}
+
+/* -------------------------------------------------------------------------
+   Variants
+   ------------------------------------------------------------------------- */
+.primary {
+  background-color: var(--color-primary);
+  color: var(--color-text-inverse);
+}
+
+.primary:hover:not(:disabled) {
+  background-color: var(--color-primary-strong);
+}
+
+.secondary {
+  background-color: var(--color-surface-2);
+  color: var(--color-text);
+  border-color: var(--color-border);
+}
+
+.secondary:hover:not(:disabled) {
+  background-color: var(--color-surface);
+}
+
+.ghost {
+  background-color: transparent;
+  color: var(--color-primary);
+}
+
+.ghost:hover:not(:disabled) {
+  background-color: var(--color-primary-soft);
+}
+
+.danger {
+  background-color: var(--color-danger);
+  color: var(--color-text-inverse);
+}
+
+.danger:hover:not(:disabled) {
+  box-shadow: var(--shadow-2);
+}
+
+.icon {
+  padding: var(--space-2);
+  border-radius: var(--radius-full);
+  background-color: transparent;
+  color: var(--color-text);
+}
+
+.icon:hover:not(:disabled) {
+  background-color: var(--color-surface-2);
+}
+
+/* -------------------------------------------------------------------------
+   Loading spinner
+   ------------------------------------------------------------------------- */
+.spinner {
+  width: var(--space-4);
+  height: var(--space-4);
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: var(--radius-full);
+  animation: spin var(--duration-slow) linear infinite;
+}
+
+.label {
+  display: inline-flex;
+  align-items: center;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Requirement 30.7: disable non-essential animation under reduced motion. */
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation: none;
+  }
+
+  .button {
+    transition-duration: 50ms;
+  }
+}

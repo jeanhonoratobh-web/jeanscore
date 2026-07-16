@@ -1,0 +1,31 @@
+/**
+ * StatCard styles — Design_Tokens only (Requirement 3.4).
+ */
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-1);
+}
+
+.value {
+  font-family: var(--font-family-display);
+  font-size: var(--font-h1-size);
+  font-weight: var(--font-h1-weight);
+  line-height: var(--font-h1-line);
+  color: var(--color-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.label {
+  font-family: var(--font-family-base);
+  font-size: var(--font-body-sm-size);
+  font-weight: var(--font-body-sm-weight);
+  line-height: var(--font-body-sm-line);
+  color: var(--color-text-muted);
+}

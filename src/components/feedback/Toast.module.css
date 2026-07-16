@@ -1,0 +1,117 @@
+/**
+ * Toast styling — Design_Tokens only (Requirement 3.4).
+ *
+ * A single toast card plus the fixed, bottom-right stack region
+ * (Requirements 31.1, 31.3). Entry animation is non-essential and disabled
+ * under `prefers-reduced-motion: reduce` (Requirement 30.7).
+ */
+
+.viewport {
+  position: fixed;
+  right: var(--space-5);
+  bottom: var(--space-5);
+  z-index: var(--z-toast);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  max-width: min(92vw, 360px);
+  pointer-events: none;
+}
+
+.toast {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-left-width: var(--space-1);
+  border-radius: var(--radius-md);
+  background-color: var(--color-surface);
+  box-shadow: var(--shadow-2);
+  color: var(--color-text);
+  pointer-events: auto;
+  animation: toast-in var(--duration-base) var(--ease-standard);
+}
+
+/* Semantic accent per kind, from semantic Design_Tokens (Requirement 31.2). */
+.success {
+  border-left-color: var(--color-success);
+}
+
+.error {
+  border-left-color: var(--color-danger);
+}
+
+.info {
+  border-left-color: var(--color-info);
+}
+
+.icon {
+  flex: none;
+  width: var(--space-5);
+  height: var(--space-5);
+  border-radius: var(--radius-full);
+}
+
+.success .icon {
+  background-color: var(--color-success);
+}
+
+.error .icon {
+  background-color: var(--color-danger);
+}
+
+.info .icon {
+  background-color: var(--color-info);
+}
+
+.message {
+  flex: 1 1 auto;
+  margin: 0;
+  font-family: var(--font-family-base);
+  font-size: var(--font-body-sm-size);
+  line-height: var(--font-body-sm-line);
+  color: var(--color-text);
+}
+
+.dismiss {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--space-5);
+  height: var(--space-5);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: var(--font-body-size);
+  line-height: 1;
+  cursor: pointer;
+}
+
+.dismiss:hover {
+  color: var(--color-text);
+}
+
+.dismiss:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+@keyframes toast-in {
+  from {
+    transform: translateY(var(--space-4));
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .toast {
+    animation: none;
+  }
+}

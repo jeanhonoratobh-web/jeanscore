@@ -1,0 +1,130 @@
+/**
+ * HomePage styles — Design_Tokens only (Requirement 3.4).
+ *
+ * No literal colors, spacing, radii, shadows or durations: every visual value
+ * resolves to a `var(--token)` from `theme/tokens.css`, so the page re-themes
+ * with the rest of the product via `data-theme` (Requirement 4.3).
+ */
+
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-7);
+  width: min(100%, 1120px);
+  margin: 0 auto;
+  padding: var(--space-5) var(--space-4);
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.sectionTitle {
+  margin: 0;
+  font-family: var(--font-family-display);
+  font-size: var(--font-h2-size);
+  line-height: var(--font-h2-line);
+  font-weight: var(--font-h2-weight);
+  color: var(--color-text);
+}
+
+.cardGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: var(--space-4);
+}
+
+.previewLink,
+.quickNavLink {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-3) var(--space-5);
+  border-radius: var(--radius-md);
+  background-color: var(--color-primary);
+  color: var(--color-text-inverse);
+  font-family: var(--font-family-base);
+  font-size: var(--font-body-size);
+  font-weight: var(--font-h3-weight);
+  text-decoration: none;
+  box-shadow: var(--shadow-1);
+  transition: background-color var(--duration-fast) var(--ease-standard);
+}
+
+.previewLink:hover,
+.quickNavLink:hover {
+  background-color: var(--color-primary-strong);
+}
+
+.quickNav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.nextMatch {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  align-items: center;
+  padding: var(--space-5);
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-1);
+}
+
+.nextMatchTeams {
+  margin: 0;
+  font-family: var(--font-family-display);
+  font-size: var(--font-h3-size);
+  line-height: var(--font-h3-line);
+  font-weight: var(--font-h3-weight);
+  color: var(--color-text);
+}
+
+.activityList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.activityItem {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.activityPlayer {
+  font-family: var(--font-family-base);
+  font-size: var(--font-body-size);
+  font-weight: var(--font-h3-weight);
+  color: var(--color-primary);
+  text-decoration: none;
+}
+
+.activityPlayer:hover {
+  text-decoration: underline;
+}
+
+.activityMeta {
+  flex: 1;
+  font-size: var(--font-body-sm-size);
+  color: var(--color-text-muted);
+}
+
+.activityScore {
+  font-family: var(--font-family-display);
+  font-size: var(--font-body-size);
+  font-weight: var(--font-h2-weight);
+  color: var(--color-accent-strong);
+}

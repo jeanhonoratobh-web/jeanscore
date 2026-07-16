@@ -1,0 +1,178 @@
+/**
+ * ElencoPage styles.
+ *
+ * Styled exclusively through Design_Tokens (CSS Custom Properties) per
+ * Requirement 3.4 — no hardcoded colors, spacing, radii, shadows or durations.
+ * Provides a responsive collectible-card grid plus a token-driven filter bar
+ * (position, sort, rating range and minimum votes) for the squad view
+ * (Requirement 15).
+ */
+
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  padding: var(--space-5) var(--space-4);
+  max-width: 1200px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.title {
+  font-family: var(--font-family-display);
+  font-size: var(--font-h1-size);
+  line-height: var(--font-h1-line);
+  font-weight: var(--font-h1-weight);
+  color: var(--color-text);
+  margin: 0;
+}
+
+.subtitle {
+  font-size: var(--font-body-size);
+  line-height: var(--font-body-line);
+  color: var(--color-text-muted);
+  margin: 0;
+}
+
+/* --- Filter bar --------------------------------------------------------- */
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-1);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 160px;
+}
+
+.fieldLabel {
+  font-size: var(--font-caption-size);
+  line-height: var(--font-caption-line);
+  font-weight: var(--font-caption-weight);
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.select {
+  appearance: none;
+  font-family: var(--font-family-base);
+  font-size: var(--font-body-sm-size);
+  color: var(--color-text);
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-2) var(--space-3);
+  cursor: pointer;
+  transition: border-color var(--duration-fast) var(--ease-standard);
+}
+
+.select:hover {
+  border-color: var(--color-primary);
+}
+
+.select:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+/* Rating range field spans two labelled sliders. */
+.rangeField {
+  min-width: 220px;
+}
+
+.rangeRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.rangeSlider {
+  flex: 1 1 auto;
+  accent-color: var(--color-primary);
+  cursor: pointer;
+}
+
+.rangeValue {
+  font-size: var(--font-body-sm-size);
+  font-weight: var(--font-h3-weight);
+  color: var(--color-text);
+  min-width: 2.5ch;
+  text-align: center;
+}
+
+.rangeSep {
+  color: var(--color-text-muted);
+}
+
+/* Push count + clear action to the far end of the bar. */
+.spacer {
+  flex: 1 1 auto;
+}
+
+.resultSummary {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.count {
+  font-size: var(--font-body-sm-size);
+  font-weight: var(--font-h3-weight);
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+/* --- Card grid ---------------------------------------------------------- */
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: var(--space-4);
+}
+
+/* Anchor wrapper keeps navigation router-agnostic and accessible while the
+   PlayerCard stays a presentational (non-interactive) child. */
+.cardLink {
+  display: block;
+  text-decoration: none;
+  color: inherit;
+  border-radius: var(--radius-lg);
+}
+
+.cardLink:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 3px;
+}
+
+@media (max-width: 600px) {
+  .controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .field,
+  .rangeField {
+    min-width: 0;
+  }
+
+  .grid {
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  }
+}

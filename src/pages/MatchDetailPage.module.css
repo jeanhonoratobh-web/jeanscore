@@ -1,0 +1,344 @@
+/**
+ * MatchDetailPage styles — Design_Tokens only (Requirement 3.4).
+ *
+ * No literal colors, spacing, radii, shadows or durations: every visual value
+ * is a `var(--token)` from `theme/tokens.css`, so the page re-themes with the
+ * rest of the product (Requirement 4.2).
+ */
+
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  width: 100%;
+  max-width: 960px;
+  margin: 0 auto;
+  padding: var(--space-5) var(--space-4);
+}
+
+/* Scoreboard -------------------------------------------------------------- */
+
+.scoreboard {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-5) var(--space-4);
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+
+.meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.status {
+  font-size: var(--font-caption-size);
+  font-weight: var(--font-caption-weight);
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+}
+
+.teams {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-4);
+  width: 100%;
+}
+
+.team {
+  flex: 1;
+  font-family: var(--font-family-display);
+  font-size: var(--font-h3-size);
+  font-weight: var(--font-h3-weight);
+  color: var(--color-text);
+  text-align: center;
+}
+
+.score {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-family: var(--font-family-display);
+  font-size: var(--font-h1-size);
+  font-weight: var(--font-h1-weight);
+  color: var(--color-primary);
+}
+
+.scoreSep {
+  color: var(--color-text-muted);
+}
+
+.info {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-3);
+  font-size: var(--font-body-sm-size);
+  color: var(--color-text-muted);
+}
+
+.rateAction {
+  display: inline-block;
+  margin-top: var(--space-2);
+  padding: var(--space-3) var(--space-5);
+  background-color: var(--color-primary);
+  color: var(--color-text-inverse);
+  border-radius: var(--radius-full);
+  font-family: var(--font-family-base);
+  font-weight: var(--font-h3-weight);
+  text-decoration: none;
+  transition: box-shadow var(--duration-fast) var(--ease-standard);
+}
+
+.rateAction:hover {
+  box-shadow: var(--shadow-2);
+}
+
+.rateAction:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+/* Community summary ------------------------------------------------------- */
+
+.summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--space-4);
+}
+
+.stat {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-4);
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.statLabel {
+  font-size: var(--font-caption-size);
+  font-weight: var(--font-caption-weight);
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+}
+
+.statValue {
+  font-family: var(--font-family-display);
+  font-size: var(--font-h3-size);
+  font-weight: var(--font-h3-weight);
+  color: var(--color-text);
+}
+
+/* Sections ---------------------------------------------------------------- */
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.sectionTitle {
+  font-family: var(--font-family-display);
+  font-size: var(--font-h2-size);
+  font-weight: var(--font-h2-weight);
+  color: var(--color-text);
+  margin: 0;
+}
+
+/* Lineup list ------------------------------------------------------------- */
+
+.lineup {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.lineupItem {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.playerName {
+  font-family: var(--font-family-base);
+  font-size: var(--font-body-size);
+  color: var(--color-text);
+}
+
+.playerScore {
+  font-family: var(--font-family-display);
+  font-size: var(--font-h3-size);
+  font-weight: var(--font-h3-weight);
+  color: var(--color-primary);
+}
+
+.playerVotes {
+  font-size: var(--font-body-sm-size);
+  color: var(--color-text-muted);
+}
+
+/* Craque da Partida ------------------------------------------------------- */
+
+.craqueLeader {
+  margin: 0;
+  font-size: var(--font-body-size);
+  color: var(--color-text);
+}
+
+.craqueList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.craqueItem {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.craqueCount {
+  font-size: var(--font-body-sm-size);
+  color: var(--color-text-muted);
+}
+
+.voteButton {
+  appearance: none;
+  padding: var(--space-2) var(--space-4);
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-primary);
+  border-radius: var(--radius-full);
+  font-family: var(--font-family-base);
+  font-size: var(--font-body-sm-size);
+  color: var(--color-primary);
+  cursor: pointer;
+  transition: background-color var(--duration-fast) var(--ease-standard),
+    color var(--duration-fast) var(--ease-standard);
+}
+
+.voteButton:hover {
+  background-color: var(--color-primary);
+  color: var(--color-text-inverse);
+}
+
+.voteButton[aria-pressed='true'] {
+  background-color: var(--color-primary);
+  color: var(--color-text-inverse);
+}
+
+.voteButton:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.voteButton:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+/* Palpite (prediction) ---------------------------------------------------- */
+
+.predictionForm {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.predictionLabel {
+  font-size: var(--font-caption-size);
+  font-weight: var(--font-caption-weight);
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  width: 100%;
+}
+
+.predictionInputs {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.predictionTeam {
+  font-family: var(--font-family-base);
+  font-size: var(--font-body-sm-size);
+  color: var(--color-text);
+}
+
+.predictionInput {
+  width: 3.5rem;
+  padding: var(--space-2);
+  background-color: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-family-base);
+  font-size: var(--font-body-size);
+  color: var(--color-text);
+  text-align: center;
+}
+
+.predictionInput:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.predictionSep {
+  color: var(--color-text-muted);
+}
+
+.predictionSubmit {
+  appearance: none;
+  padding: var(--space-3) var(--space-5);
+  background-color: var(--color-primary);
+  border: none;
+  border-radius: var(--radius-full);
+  font-family: var(--font-family-base);
+  font-weight: var(--font-h3-weight);
+  color: var(--color-text-inverse);
+  cursor: pointer;
+  transition: box-shadow var(--duration-fast) var(--ease-standard);
+}
+
+.predictionSubmit:hover {
+  box-shadow: var(--shadow-2);
+}
+
+.predictionSubmit:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.predictionSubmit:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}

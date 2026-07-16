@@ -1,0 +1,94 @@
+/**
+ * OnboardingPage styles — Design_Tokens only (Requirement 3.4).
+ *
+ * No literal colors, spacing, radii, shadows or durations: every visual value
+ * is a `var(--token)` from `theme/tokens.css`.
+ */
+
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  width: min(100%, 720px);
+  margin: 0 auto;
+  padding: var(--space-6) var(--space-4);
+}
+
+.header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  text-align: center;
+}
+
+.title {
+  margin: 0;
+  font-family: var(--font-family-display);
+  font-size: var(--font-h1-size);
+  font-weight: var(--font-h1-weight);
+  line-height: var(--font-h1-line);
+  color: var(--color-text);
+}
+
+.subtitle {
+  margin: 0;
+  font-family: var(--font-family-base);
+  font-size: var(--font-body-size);
+  color: var(--color-text-muted);
+}
+
+.steps {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.step {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-5);
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-1);
+}
+
+.stepTitle {
+  margin: 0;
+  font-family: var(--font-family-display);
+  font-size: var(--font-h3-size);
+  font-weight: var(--font-h3-weight);
+  line-height: var(--font-h3-line);
+  color: var(--color-text);
+}
+
+.stepBody {
+  margin: 0;
+  font-family: var(--font-family-base);
+  font-size: var(--font-body-size);
+  line-height: var(--font-body-line);
+  color: var(--color-text-muted);
+}
+
+.noFixture {
+  margin: 0;
+  padding: var(--space-4);
+  text-align: center;
+  font-family: var(--font-family-base);
+  font-size: var(--font-body-size);
+  color: var(--color-text);
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  align-items: center;
+}

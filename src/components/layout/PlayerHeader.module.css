@@ -1,0 +1,131 @@
+/**
+ * PlayerHeader styles — Design_Tokens only (Requirement 3.4).
+ *
+ * No literal colors, spacing, radii, shadows or durations: every visual value
+ * is a `var(--token)` from `theme/tokens.css`. The `--rarity-*` tokens drive the
+ * per-rarity frame treatment.
+ */
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-5);
+  padding: var(--space-5);
+  background-color: var(--color-surface);
+  border: 2px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-2);
+}
+
+/* Rarity treatments: border colour driven by rarity tokens. */
+.bronze {
+  border-color: var(--rarity-bronze);
+}
+
+.silver {
+  border-color: var(--rarity-silver);
+}
+
+.gold {
+  border-color: var(--rarity-gold);
+}
+
+.legendary {
+  border-color: var(--rarity-legendary);
+  box-shadow: var(--shadow-glow);
+}
+
+.photoFrame {
+  flex: 0 0 auto;
+  width: var(--space-8);
+  height: var(--space-8);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+  border: 2px solid currentColor;
+  color: inherit;
+}
+
+.photo {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.photoFallback {
+  width: 100%;
+  height: 100%;
+  background-color: var(--color-surface-2);
+}
+
+.identity {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.name {
+  margin: 0;
+  font-family: var(--font-family-display);
+  font-size: var(--font-h1-size);
+  font-weight: var(--font-h1-weight);
+  line-height: var(--font-h1-line);
+  color: var(--color-text);
+}
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  margin: 0;
+}
+
+.metaItem {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-1);
+}
+
+.metaLabel {
+  margin: 0;
+  font-size: var(--font-caption-size);
+  font-weight: var(--font-caption-weight);
+  line-height: var(--font-caption-line);
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+}
+
+.metaValue {
+  margin: 0;
+  font-size: var(--font-body-size);
+  font-weight: var(--font-h3-weight);
+  line-height: var(--font-body-line);
+  color: var(--color-text);
+}
+
+.season {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  margin-top: var(--space-1);
+}
+
+.seasonLabel {
+  font-size: var(--font-body-sm-size);
+  color: var(--color-text-muted);
+}
+
+.seasonValue {
+  font-family: var(--font-family-display);
+  font-size: var(--font-h2-size);
+  font-weight: var(--font-h1-weight);
+  color: var(--color-primary);
+}
+
+@media (max-width: 768px) {
+  .header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}

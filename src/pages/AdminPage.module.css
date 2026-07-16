@@ -1,0 +1,316 @@
+/**
+ * AdminPage styles.
+ *
+ * Styled exclusively through Design_Tokens (CSS Custom Properties) per
+ * Requirement 3.4 — no hardcoded colors, spacing, radii, shadows or durations.
+ * Provides the admin panel shell: tab navigation plus the users, squad and
+ * fixtures management surfaces, including tables, the manual add/edit form
+ * (with red-bordered invalid fields, Requirement 28.10) and batch-import
+ * panels (Requirement 28).
+ */
+
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  padding: var(--space-5) var(--space-4);
+  max-width: 1100px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.title {
+  font-family: var(--font-family-display);
+  font-size: var(--font-h1-size);
+  line-height: var(--font-h1-line);
+  font-weight: var(--font-h1-weight);
+  color: var(--color-text);
+  margin: 0;
+}
+
+.subtitle {
+  font-size: var(--font-body-size);
+  line-height: var(--font-body-line);
+  color: var(--color-text-muted);
+  margin: 0;
+}
+
+/* --- Tab navigation ----------------------------------------------------- */
+
+.tabs {
+  display: flex;
+  gap: var(--space-2);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.tab {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--color-text-muted);
+  font-family: var(--font-family-base);
+  font-size: var(--font-body-size);
+  font-weight: var(--font-h3-weight);
+  padding: var(--space-3) var(--space-4);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: color var(--duration-fast) var(--ease-standard),
+    border-color var(--duration-fast) var(--ease-standard);
+}
+
+.tab:hover {
+  color: var(--color-text);
+}
+
+.tab:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.tabActive {
+  color: var(--color-primary);
+  border-bottom-color: var(--color-primary);
+}
+
+/* --- Panels / cards ----------------------------------------------------- */
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.panelHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.panelTitle {
+  font-family: var(--font-family-display);
+  font-size: var(--font-h2-size);
+  line-height: var(--font-h2-line);
+  font-weight: var(--font-h2-weight);
+  color: var(--color-text);
+  margin: 0;
+}
+
+.card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-1);
+  padding: var(--space-4);
+}
+
+/* --- Tables ------------------------------------------------------------- */
+
+.tableWrap {
+  overflow-x: auto;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--font-body-sm-size);
+}
+
+.table th,
+.table td {
+  text-align: left;
+  padding: var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+  color: var(--color-text);
+  white-space: nowrap;
+}
+
+.table th {
+  font-size: var(--font-caption-size);
+  font-weight: var(--font-caption-weight);
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.actions {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+/* --- Status / role badges ---------------------------------------------- */
+
+.badge {
+  display: inline-block;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-caption-size);
+  font-weight: var(--font-h3-weight);
+  line-height: 1;
+}
+
+.badgePending {
+  background: color-mix(in srgb, var(--color-warning) 18%, transparent);
+  color: var(--color-warning);
+}
+
+.badgeApproved {
+  background: color-mix(in srgb, var(--color-success) 18%, transparent);
+  color: var(--color-success);
+}
+
+.badgeRejected {
+  background: color-mix(in srgb, var(--color-danger) 18%, transparent);
+  color: var(--color-danger);
+}
+
+.badgeRole {
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+}
+
+.badgeReleased {
+  background: color-mix(in srgb, var(--color-success) 18%, transparent);
+  color: var(--color-success);
+}
+
+.badgeNotReleased {
+  background: var(--color-surface-2);
+  color: var(--color-text-muted);
+}
+
+/* --- Forms -------------------------------------------------------------- */
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.formGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--space-3);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.fieldLabel {
+  font-size: var(--font-caption-size);
+  font-weight: var(--font-caption-weight);
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.input,
+.select,
+.textarea {
+  font-family: var(--font-family-base);
+  font-size: var(--font-body-sm-size);
+  color: var(--color-text);
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-2) var(--space-3);
+  transition: border-color var(--duration-fast) var(--ease-standard);
+}
+
+.input:focus-visible,
+.select:focus-visible,
+.textarea:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+/* Invalid required field: red border + message (Requirement 28.10). */
+.inputInvalid {
+  border-color: var(--color-danger);
+}
+
+.fieldError {
+  font-size: var(--font-caption-size);
+  color: var(--color-danger);
+}
+
+.textarea {
+  min-height: 120px;
+  resize: vertical;
+  font-family: var(--font-family-mono, monospace);
+}
+
+.formActions {
+  display: flex;
+  gap: var(--space-2);
+  justify-content: flex-end;
+}
+
+/* --- Lineup editor ------------------------------------------------------ */
+
+.lineupList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  max-height: 360px;
+  overflow-y: auto;
+  padding: var(--space-1);
+}
+
+.lineupRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  color: var(--color-text);
+  font-size: var(--font-body-sm-size);
+}
+
+.lineupRow:hover {
+  background: var(--color-surface-2);
+}
+
+.lineupCount {
+  font-size: var(--font-body-sm-size);
+  color: var(--color-text-muted);
+}
+
+.modalActions {
+  display: flex;
+  gap: var(--space-2);
+  justify-content: flex-end;
+  margin-top: var(--space-4);
+}
+
+.confirmText {
+  color: var(--color-text);
+  font-size: var(--font-body-size);
+  margin: 0 0 var(--space-2);
+}
+
+@media (max-width: 600px) {
+  .table th,
+  .table td {
+    padding: var(--space-2);
+  }
+}
