@@ -1,0 +1,141 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&family=Inter:wght@300;400;500;600;700&display=swap');
+@import 'tailwindcss';
+
+@theme {
+  --font-sans: 'Inter', system-ui, sans-serif;
+  --font-display: 'Plus Jakarta Sans', system-ui, sans-serif;
+
+  --color-navy-950: #030812;
+  --color-navy-900: #050D1B;
+  --color-navy-800: #091525;
+  --color-navy-750: #0C1C30;
+  --color-navy-700: #0F2040;
+  --color-navy-600: #162848;
+  --color-navy-500: #1E3358;
+  --color-navy-400: #284070;
+
+  --color-blue-800: #001E60;
+  --color-blue-700: #002878;
+  --color-blue-600: #003087;
+  --color-blue-500: #0040AB;
+  --color-blue-400: #1A5FCC;
+  --color-blue-300: #4A8EE8;
+  --color-blue-200: #7AB5F5;
+  --color-blue-100: #BDD8FA;
+
+  --color-gold-700: #7A5A08;
+  --color-gold-600: #9E7818;
+  --color-gold-500: #C4972A;
+  --color-gold-400: #D4AE3A;
+  --color-gold-300: #E8C84C;
+  --color-gold-200: #F0D878;
+  --color-gold-100: #FBF0B8;
+
+  --color-silver-600: #5A6878;
+  --color-silver-500: #7A8898;
+  --color-silver-400: #9AAAB8;
+  --color-silver-300: #B8C8D8;
+  --color-silver-200: #D0DCE8;
+
+  --color-bronze-600: #6B3010;
+  --color-bronze-500: #8B4820;
+  --color-bronze-400: #A86030;
+  --color-bronze-300: #C47848;
+}
+
+*, *::before, *::after {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+*::-webkit-scrollbar {
+  display: none;
+}
+
+html, body {
+  background-color: #050D1B;
+  color: #EEF2F8;
+  font-family: 'Inter', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+@keyframes pulse-glow {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.7; transform: scale(0.95); }
+}
+
+@keyframes live-pulse {
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
+  50% { opacity: 0.8; box-shadow: 0 0 0 6px rgba(239, 68, 68, 0); }
+}
+
+@keyframes shimmer {
+  0% { transform: translateX(-100%) skewX(-12deg); }
+  100% { transform: translateX(300%) skewX(-12deg); }
+}
+
+@keyframes card-float {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-4px); }
+}
+
+@keyframes count-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fade-in-up {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes spin-slow {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.animate-live-pulse {
+  animation: live-pulse 1.5s ease-in-out infinite;
+}
+
+.animate-spin {
+  animation: spin-slow 0.75s linear infinite;
+}
+
+.animate-card-float {
+  animation: card-float 3s ease-in-out infinite;
+}
+
+.animate-count-up {
+  animation: count-up 0.5s ease-out forwards;
+}
+
+.animate-fade-in-up {
+  animation: fade-in-up 0.5s ease-out forwards;
+}
+
+.card-shine::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(105deg, transparent 40%, rgba(255,255,255,0.08) 50%, transparent 60%);
+  animation: shimmer 3s ease-in-out infinite;
+  pointer-events: none;
+}
+
+.legendary-glow {
+  box-shadow: 0 0 20px rgba(196, 151, 42, 0.3), 0 0 60px rgba(196, 151, 42, 0.1), inset 0 1px 0 rgba(196, 151, 42, 0.2);
+}
+
+.gold-glow {
+  box-shadow: 0 0 16px rgba(196, 151, 42, 0.25), 0 0 40px rgba(196, 151, 42, 0.08);
+}
+
+.silver-glow {
+  box-shadow: 0 0 12px rgba(154, 170, 184, 0.2), 0 0 30px rgba(154, 170, 184, 0.06);
+}
+
+.bronze-glow {
+  box-shadow: 0 0 12px rgba(168, 96, 48, 0.25), 0 0 30px rgba(168, 96, 48, 0.08);
+}

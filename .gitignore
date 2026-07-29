@@ -1,0 +1,12 @@
+node_modules
+dist
+*.local
+.DS_Store
+.vscode/*
+!.vscode/extensions.json
+
+# The old (strict) app clone lives here only as a local reference — not deployed.
+jeanscore-app/
+
+# Legacy lockfile from the old app; this project uses npm (package-lock.json).
+pnpm-lock.yaml
