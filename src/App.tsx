@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, createContext, useContext, type ReactNode } from 'react'
 import fotoCapa from './imports/Foto_Capa.jpg'
 import fotoFundoInicio from './imports/Foto_Fundo_Inicio.jpg'
+import { supabase } from './supabase'
 import {
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer,
   BarChart, Bar, CartesianGrid, RadarChart, Radar, PolarGrid, PolarAngleAxis,
@@ -10,7 +11,7 @@ import {
   TrendingUp, TrendingDown, Minus, MapPin, Clock, Award,
   Search, Bell, ArrowLeft, Shield, Target,
   Activity, Vote, Crown, Flame, CheckCircle,
-  BarChart2, Zap, Eye, Heart,
+  BarChart2, Zap, Eye, Heart, LogOut,
 } from 'lucide-react'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -23,13 +24,13 @@ interface Player {
   id: number; name: string; short: string; pos: Pos; rating: number;
   votes: number; flag: string; rarity: Rarity; num: number; goals: number;
   assists: number; matches: number; trend: 'up' | 'down' | 'stable';
-  nat: string; age: number; cleanSheets?: number; saves?: number; photo?: string;
+  nat: string; age: number; cleanSheets?: number; saves?: number; photo?: string; dbId?: string;
 }
 
 interface Match {
   id: number; home: string; away: string; homeScore: number; awayScore: number;
   date: string; comp: string; status: 'live' | 'finished' | 'upcoming';
-  minute?: number; venue: string; round: string;
+  minute?: number; venue: string; round: string; dbId?: string;
 }
 
 // ─── Data ─────────────────────────────────────────────────────────────────────
@@ -100,6 +101,21 @@ const POS_COLORS: Record<Pos, string> = {
 const fmtRating = (r: number) => r > 0 ? r.toFixed(1) : '–'
 const fmtVotes = (v: number) => v >= 1000 ? `${(v / 1000).toFixed(1)}K` : v.toString()
 const isCruzeiro = (team: string) => team === 'Cruzeiro'
+
+/** Card rarity derived from a player's average rating (0 = unrated → bronze). */
+const rarityFromRating = (r: number): Rarity =>
+  r >= 8.5 ? 'legendary' : r >= 7.5 ? 'gold' : r >= 6 ? 'silver' : 'bronze'
+
+/** Short "há X" relative time from an ISO timestamp. */
+function timeAgo(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime()
+  const min = Math.floor(diff / 60000)
+  if (min < 1) return 'agora'
+  if (min < 60) return `${min}min`
+  const h = Math.floor(min / 60)
+  if (h < 24) return `${h}h`
+  return `${Math.floor(h / 24)}d`
+}
 
 // ─── Real data (Supabase) ───────────────────────────────────────────────────
 // Live squad + fixtures come from the JeanScore Supabase project via its REST
@@ -175,6 +191,7 @@ function mapSquadRowToPlayer(row: DbSquadRow, index: number): Player {
     nat: NAT_PT[nat] ?? nat,
     age: 0,
     photo: row.photo ?? undefined,
+    dbId: row.id,
   }
 }
 
@@ -196,6 +213,7 @@ function mapFixtureRowToMatch(row: DbFixtureRow, index: number): Match {
     status: row.status === 'finished' ? 'finished' : 'upcoming',
     venue: row.stadium ?? '',
     round: '',
+    dbId: row.id,
   }
 }
 
@@ -223,15 +241,27 @@ interface DbCompetitionStatus {
   sort: number
 }
 
+interface DbRatingRow {
+  id: string
+  user_id: string
+  user_name: string
+  player_id: string
+  fixture_id: string
+  score: number
+  created_at: string
+}
+
 interface JeanData {
   players: Player[]
   matches: Match[]
   standings: DbStandingRow[]
   competitions: DbCompetitionStatus[]
+  recentRatings: DbRatingRow[]
   loading: boolean
+  reload: () => void
 }
 
-const DataContext = createContext<JeanData>({ players: MOCK_PLAYERS, matches: MOCK_MATCHES, standings: [], competitions: [], loading: true })
+const DataContext = createContext<JeanData>({ players: MOCK_PLAYERS, matches: MOCK_MATCHES, standings: [], competitions: [], recentRatings: [], loading: true, reload: () => {} })
 
 function useData(): JeanData {
   return useContext(DataContext)
@@ -250,11 +280,27 @@ function DataProvider({ children }: { children: ReactNode }) {
   const [matches, setMatches] = useState<Match[]>(MOCK_MATCHES)
   const [standings, setStandings] = useState<DbStandingRow[]>([])
   const [competitions, setCompetitions] = useState<DbCompetitionStatus[]>([])
+  const [recentRatings, setRecentRatings] = useState<DbRatingRow[]>([])
   const [loading, setLoading] = useState(true)
+  const [tick, setTick] = useState(0)
+  const reload = () => setTick((t) => t + 1)
 
   useEffect(() => {
     let active = true
     ;(async () => {
+      // Ratings first (public read) so we can fold season averages into the squad.
+      let ratingRows: DbRatingRow[] = []
+      try {
+        ratingRows = await supaGet<DbRatingRow[]>('ratings?select=*&order=created_at.desc')
+      } catch { /* ratings table may not exist yet */ }
+      const agg = new Map<string, { sum: number; n: number }>()
+      for (const r of ratingRows) {
+        const a = agg.get(r.player_id) ?? { sum: 0, n: 0 }
+        a.sum += Number(r.score)
+        a.n += 1
+        agg.set(r.player_id, a)
+      }
+
       try {
         const [squad, fixtures] = await Promise.all([
           supaGet<DbSquadRow[]>('squad?select=id,name,position,number,photo,nationality&order=name.asc'),
@@ -262,7 +308,17 @@ function DataProvider({ children }: { children: ReactNode }) {
         ])
         if (!active) return
         if (squad.length > 0) {
-          setPlayers(squad.map(mapSquadRowToPlayer))
+          setPlayers(squad.map((row, i) => {
+            const p = mapSquadRowToPlayer(row, i)
+            const a = agg.get(row.id)
+            if (a && a.n > 0) {
+              const avg = Math.round((a.sum / a.n) * 10) / 10
+              p.rating = avg
+              p.votes = a.n
+              p.rarity = rarityFromRating(avg)
+            }
+            return p
+          }))
         }
         if (fixtures.length > 0) {
           // Most recent results first, then upcoming fixtures in chronological order.
@@ -270,6 +326,7 @@ function DataProvider({ children }: { children: ReactNode }) {
           const upcoming = fixtures.filter((f) => f.status !== 'finished').sort((a, b) => a.ts - b.ts)
           setMatches([...finished, ...upcoming].map(mapFixtureRowToMatch))
         }
+        if (active) setRecentRatings(ratingRows.slice(0, 8))
       } catch (err) {
         console.error('Failed to load JeanScore data from Supabase', err)
       }
@@ -289,13 +346,68 @@ function DataProvider({ children }: { children: ReactNode }) {
     return () => {
       active = false
     }
-  }, [])
+  }, [tick])
 
   return (
-    <DataContext.Provider value={{ players, matches, standings, competitions, loading }}>
+    <DataContext.Provider value={{ players, matches, standings, competitions, recentRatings, loading, reload }}>
       {children}
     </DataContext.Provider>
   )
+}
+
+// ─── Auth (Supabase) ────────────────────────────────────────────────────────
+
+interface AuthUser {
+  id: string
+  name: string
+  email: string
+}
+
+interface AuthState {
+  user: AuthUser | null
+  loading: boolean
+  signOut: () => void
+}
+
+const AuthContext = createContext<AuthState>({ user: null, loading: true, signOut: () => {} })
+
+function useAuth(): AuthState {
+  return useContext(AuthContext)
+}
+
+function mapAuthUser(session: { user?: { id: string; email?: string; user_metadata?: Record<string, unknown> } } | null): AuthUser | null {
+  const u = session?.user
+  if (!u) return null
+  const metaName = typeof u.user_metadata?.name === 'string' ? (u.user_metadata.name as string) : ''
+  const name = metaName || (u.email ? u.email.split('@')[0] : 'Torcedor')
+  return { id: u.id, name, email: u.email ?? '' }
+}
+
+function AuthProvider({ children }: { children: ReactNode }) {
+  const [user, setUser] = useState<AuthUser | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let active = true
+    supabase.auth.getSession().then(({ data }) => {
+      if (!active) return
+      setUser(mapAuthUser(data.session))
+      setLoading(false)
+    })
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(mapAuthUser(session))
+    })
+    return () => {
+      active = false
+      sub.subscription.unsubscribe()
+    }
+  }, [])
+
+  const signOut = (): void => {
+    void supabase.auth.signOut()
+  }
+
+  return <AuthContext.Provider value={{ user, loading, signOut }}>{children}</AuthContext.Provider>
 }
 
 // ─── Small Components ─────────────────────────────────────────────────────────
@@ -704,6 +816,7 @@ const NAV_ITEMS = [
 
 function Sidebar({ page, setPage }: { page: Page; setPage: (p: Page) => void }) {
   const [expanded, setExpanded] = useState(false)
+  const { signOut } = useAuth()
   return (
     <aside
       onMouseEnter={() => setExpanded(true)}
@@ -752,6 +865,15 @@ function Sidebar({ page, setPage }: { page: Page; setPage: (p: Page) => void }) 
             Admin
           </span>
         </button>
+        <button onClick={signOut}
+          className="flex items-center gap-3 mx-2 px-2.5 py-2.5 rounded-xl w-[calc(100%-16px)] transition-all duration-150"
+          style={{ background: 'transparent' }}>
+          <LogOut size={16} style={{ flexShrink: 0, color: '#2A3A50' }} />
+          <span className="text-sm font-medium whitespace-nowrap overflow-hidden"
+            style={{ opacity: expanded ? 1 : 0, width: expanded ? 'auto' : 0, color: '#3A5070', transition: 'all 0.2s ease' }}>
+            Sair
+          </span>
+        </button>
       </div>
     </aside>
   )
@@ -788,8 +910,9 @@ function HomePage({ setPage, setSelectedPlayer, setSelectedMatch }: {
   setSelectedPlayer: (p: Player) => void
   setSelectedMatch: (m: Match) => void
 }) {
-  const { players: PLAYERS, matches: MATCHES, standings, competitions } = useData()
-  const topPlayers = PLAYERS.slice(0, 5)
+  const { players: PLAYERS, matches: MATCHES, standings, competitions, recentRatings } = useData()
+  const topPlayers = [...PLAYERS].sort((a, b) => b.rating - a.rating).slice(0, 5)
+  const playerNameById = (dbId: string) => PLAYERS.find(p => p.dbId === dbId)?.name ?? 'Jogador'
   // Featured match for the hero: the next upcoming fixture, else the most recent result.
   const featured = MATCHES.find(m => m.status === 'upcoming') ?? MATCHES.find(m => m.status === 'finished') ?? MATCHES[0] ?? MOCK_MATCHES[0]
   const cruzHome = isCruzeiro(featured.home)
@@ -1086,17 +1209,43 @@ function HomePage({ setPage, setSelectedPlayer, setSelectedMatch }: {
               <p className="text-xs mt-0.5" style={{ color: '#5070A0' }}>O que a torcida está dizendo agora</p>
             </div>
           </div>
-          <div className="rounded-2xl px-6 py-10 flex flex-col items-center text-center gap-2"
-            style={{ background: '#0A1528', border: '1px solid rgba(255,255,255,0.05)' }}>
-            <Vote size={26} style={{ color: '#2A3A50' }} />
-            <p className="font-display font-bold text-white" style={{ fontSize: 15 }}>Ainda não há avaliações</p>
-            <p className="text-xs" style={{ color: '#5070A0', maxWidth: 340 }}>Seja o primeiro a avaliar os jogadores. As notas da torcida vão aparecer aqui.</p>
-            <button onClick={() => setPage('rate')}
-              className="mt-2 flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-bold"
-              style={{ background: 'linear-gradient(135deg, #003087, #1A5FCC)', color: 'white' }}>
-              <Star size={13} /> Avaliar agora
-            </button>
-          </div>
+          {recentRatings.length > 0 ? (
+            <div className="space-y-2">
+              {recentRatings.map(r => {
+                const acc = RARITY_CFG[rarityFromRating(Number(r.score))].accent
+                return (
+                  <div key={r.id} className="flex items-start gap-3 rounded-2xl px-4 py-3.5"
+                    style={{ background: '#0A1528', border: '1px solid rgba(255,255,255,0.05)' }}>
+                    <div className="w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center font-display font-black text-xs text-white"
+                      style={{ background: 'linear-gradient(135deg, #003087, #1A5FCC)' }}>
+                      {r.user_name.charAt(0).toUpperCase()}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-xs font-semibold" style={{ color: '#8098B0' }}>{r.user_name}</span>
+                        <span className="text-xs" style={{ color: '#3A5070' }}>avaliou</span>
+                        <span className="text-xs font-semibold text-white">{playerNameById(r.player_id)}</span>
+                        <span className="px-1.5 py-0.5 rounded text-xs font-black" style={{ background: acc + '20', color: acc }}>{Number(r.score).toFixed(1)}</span>
+                        <span className="text-xs ml-auto" style={{ color: '#2A3A50' }}>{timeAgo(r.created_at)}</span>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          ) : (
+            <div className="rounded-2xl px-6 py-10 flex flex-col items-center text-center gap-2"
+              style={{ background: '#0A1528', border: '1px solid rgba(255,255,255,0.05)' }}>
+              <Vote size={26} style={{ color: '#2A3A50' }} />
+              <p className="font-display font-bold text-white" style={{ fontSize: 15 }}>Ainda não há avaliações</p>
+              <p className="text-xs" style={{ color: '#5070A0', maxWidth: 340 }}>Seja o primeiro a avaliar os jogadores. As notas da torcida vão aparecer aqui.</p>
+              <button onClick={() => setPage('rate')}
+                className="mt-2 flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-bold"
+                style={{ background: 'linear-gradient(135deg, #003087, #1A5FCC)', color: 'white' }}>
+                <Star size={13} /> Avaliar agora
+              </button>
+            </div>
+          )}
         </section>
       </div>
     </div>
@@ -1707,7 +1856,8 @@ function MatchDetailPage({ match, onBack }: { match: Match; onBack: () => void }
 // ─── Rating Page ──────────────────────────────────────────────────────────────
 
 function RatingPage() {
-  const { players: PLAYERS, matches: MATCHES } = useData()
+  const { players: PLAYERS, matches: MATCHES, reload } = useData()
+  const { user } = useAuth()
   const lastFinished = MATCHES.find(m => m.status === 'finished') ?? null
   const [currentIdx, setCurrentIdx] = useState(0)
   const [ratings, setRatings] = useState<Record<number, number>>({})
@@ -1729,10 +1879,24 @@ function RatingPage() {
     }, 350)
   }
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     const finalRatings = { ...ratings }
     PLAYERS.forEach(p => { if (finalRatings[p.id] === undefined) finalRatings[p.id] = 5 })
     setRatings(finalRatings)
+    if (user && lastFinished?.dbId) {
+      const rows = PLAYERS
+        .filter(p => p.dbId)
+        .map(p => ({
+          user_id: user.id,
+          user_name: user.name,
+          player_id: p.dbId as string,
+          fixture_id: lastFinished.dbId as string,
+          score: finalRatings[p.id] ?? 5,
+        }))
+      const { error } = await supabase.from('ratings').upsert(rows, { onConflict: 'user_id,player_id,fixture_id' })
+      if (error) console.error('Falha ao salvar avaliações', error)
+      else reload()
+    }
     setSubmitted(true)
   }
 
@@ -2036,7 +2200,7 @@ function AdminPage() {
 
 // ─── Auth Page ────────────────────────────────────────────────────────────────
 
-function AuthPage({ onAuth }: { onAuth: () => void }) {
+function AuthPage() {
   const [tab, setTab] = useState<'login' | 'register'>('login')
   const [form, setForm] = useState({ name: '', email: '', password: '', confirm: '' })
   const [loading, setLoading] = useState(false)
@@ -2054,13 +2218,48 @@ function AuthPage({ onAuth }: { onAuth: () => void }) {
     return errs
   }
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     const errs = validate()
     if (Object.keys(errs).length) { setErrors(errs); return }
     setErrors({})
     setLoading(true)
-    setTimeout(() => { setLoading(false); onAuth() }, 1200)
+    try {
+      if (tab === 'register') {
+        const { data, error } = await supabase.auth.signUp({
+          email: form.email,
+          password: form.password,
+          options: { data: { name: form.name.trim() } },
+        })
+        if (error) throw error
+        if (!data.session) {
+          setErrors({ email: 'Conta criada! Confirme o e-mail que enviamos para poder entrar.' })
+          setLoading(false)
+          return
+        }
+      } else {
+        const { error } = await supabase.auth.signInWithPassword({
+          email: form.email,
+          password: form.password,
+        })
+        if (error) throw error
+      }
+      // On success the auth listener flips the app to the logged-in view.
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Falha na autenticação'
+      setErrors({ email: msg })
+      setLoading(false)
+    }
+  }
+
+  const handleGuest = async () => {
+    setErrors({})
+    setLoading(true)
+    const { error } = await supabase.auth.signInAnonymously()
+    if (error) {
+      setErrors({ email: 'Modo visitante indisponível — crie uma conta para entrar.' })
+      setLoading(false)
+    }
   }
 
   return (
@@ -2214,7 +2413,7 @@ function AuthPage({ onAuth }: { onAuth: () => void }) {
           </div>
 
           {/* Guest access */}
-          <button onClick={onAuth}
+          <button onClick={handleGuest} disabled={loading}
             className="w-full py-3 rounded-2xl text-sm font-semibold transition-all duration-150"
             style={{ background: 'rgba(255,255,255,0.04)', color: '#5070A0', border: '1px solid rgba(255,255,255,0.06)' }}>
             Continuar como visitante
@@ -2244,8 +2443,8 @@ function Field({ label, error, children }: { label: string; error?: string; chil
 
 // ─── App ──────────────────────────────────────────────────────────────────────
 
-export default function App() {
-  const [authed, setAuthed] = useState(false)
+function Root() {
+  const { user, loading: authLoading } = useAuth()
   const [page, setPage] = useState<Page>('home')
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null)
   const [selectedMatch, setSelectedMatch] = useState<Match | null>(null)
@@ -2265,7 +2464,14 @@ export default function App() {
 
   const detailPage = page === 'profile' || page === 'match-detail'
 
-  if (!authed) return <AuthPage onAuth={() => setAuthed(true)} />
+  if (authLoading) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#050D1B' }}>
+        <span className="animate-spin inline-block" style={{ width: 28, height: 28, border: '3px solid rgba(255,255,255,0.15)', borderTopColor: '#4A8EE8', borderRadius: 9999 }} />
+      </div>
+    )
+  }
+  if (!user) return <AuthPage />
 
   return (
     <DataProvider>
@@ -2298,5 +2504,13 @@ export default function App() {
       </main>
     </div>
     </DataProvider>
+  )
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <Root />
+    </AuthProvider>
   )
 }
