@@ -1,5 +1,6 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, createContext, useContext, type ReactNode } from 'react'
 import fotoCapa from './imports/Foto_Capa.jpg'
+import fotoFundoInicio from './imports/Foto_Fundo_Inicio.jpg'
 import {
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer,
   BarChart, Bar, CartesianGrid, RadarChart, Radar, PolarGrid, PolarAngleAxis,
@@ -22,7 +23,7 @@ interface Player {
   id: number; name: string; short: string; pos: Pos; rating: number;
   votes: number; flag: string; rarity: Rarity; num: number; goals: number;
   assists: number; matches: number; trend: 'up' | 'down' | 'stable';
-  nat: string; age: number; cleanSheets?: number; saves?: number;
+  nat: string; age: number; cleanSheets?: number; saves?: number; photo?: string;
 }
 
 interface Match {
@@ -33,7 +34,7 @@ interface Match {
 
 // ─── Data ─────────────────────────────────────────────────────────────────────
 
-const PLAYERS: Player[] = [
+const MOCK_PLAYERS: Player[] = [
   { id: 1, name: 'Matheus Pereira', short: 'M. Pereira', pos: 'CAM', rating: 8.7, votes: 12840, flag: '🇧🇷', rarity: 'legendary', num: 10, goals: 14, assists: 11, matches: 32, trend: 'up', nat: 'Brasil', age: 28 },
   { id: 2, name: 'Cássio', short: 'Cássio', pos: 'GK', rating: 8.2, votes: 9320, flag: '🇧🇷', rarity: 'gold', num: 12, goals: 0, assists: 0, matches: 34, trend: 'stable', nat: 'Brasil', age: 37, cleanSheets: 14, saves: 89 },
   { id: 3, name: 'Kaio Jorge', short: 'Kaio Jorge', pos: 'ST', rating: 7.9, votes: 8760, flag: '🇧🇷', rarity: 'gold', num: 9, goals: 11, assists: 4, matches: 28, trend: 'up', nat: 'Brasil', age: 22 },
@@ -46,7 +47,7 @@ const PLAYERS: Player[] = [
   { id: 10, name: 'João Marcelo', short: 'J. Marcelo', pos: 'CB', rating: 6.5, votes: 2940, flag: '🇧🇷', rarity: 'bronze', num: 3, goals: 1, assists: 1, matches: 24, trend: 'down', nat: 'Brasil', age: 21 },
 ]
 
-const MATCHES: Match[] = [
+const MOCK_MATCHES: Match[] = [
   { id: 1, home: 'Cruzeiro', away: 'Flamengo', homeScore: 2, awayScore: 1, date: 'Hoje', comp: 'Brasileirão Série A', status: 'live', minute: 67, venue: 'Mineirão, Belo Horizonte', round: 'Rodada 18' },
   { id: 2, home: 'Atlético-MG', away: 'Cruzeiro', homeScore: 0, awayScore: 3, date: '07 Jul 2024', comp: 'Brasileirão Série A', status: 'finished', venue: 'Arena MRV, BH', round: 'Rodada 17' },
   { id: 3, home: 'Cruzeiro', away: 'Palmeiras', homeScore: 1, awayScore: 1, date: '03 Jul 2024', comp: 'Brasileirão Série A', status: 'finished', venue: 'Mineirão, BH', round: 'Rodada 16' },
@@ -96,9 +97,206 @@ const POS_COLORS: Record<Pos, string> = {
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
 
-const fmtRating = (r: number) => r.toFixed(1)
+const fmtRating = (r: number) => r > 0 ? r.toFixed(1) : '–'
 const fmtVotes = (v: number) => v >= 1000 ? `${(v / 1000).toFixed(1)}K` : v.toString()
 const isCruzeiro = (team: string) => team === 'Cruzeiro'
+
+// ─── Real data (Supabase) ───────────────────────────────────────────────────
+// Live squad + fixtures come from the JeanScore Supabase project via its REST
+// API (publishable/anon key — read-only). The mock arrays above are kept only
+// as the initial seed (so the UI never renders empty) and for the home hero
+// showcase. Player ratings/votes are 0 until the community voting is wired up,
+// since the `game_scores` table is still empty.
+
+const SUPABASE_URL = 'https://ozsissvmrniwmgxsgzdh.supabase.co'
+const SUPABASE_KEY = 'sb_publishable_gke_OLA7RhoTCuunJrJzoA_a9vX4GUp'
+
+interface DbSquadRow {
+  id: string
+  name: string
+  position: 'Goalkeeper' | 'Defender' | 'Midfielder' | 'Attacker'
+  number: string | null
+  photo: string | null
+  nationality: string | null
+}
+
+interface DbFixtureRow {
+  id: string
+  home_team: string
+  away_team: string
+  home_score: number | null
+  away_score: number | null
+  fixture_date: string
+  ts: number
+  competition: string
+  stadium: string | null
+  status: string
+}
+
+const POS_BY_CATEGORY: Record<DbSquadRow['position'], Pos> = {
+  Goalkeeper: 'GK',
+  Defender: 'CB',
+  Midfielder: 'CM',
+  Attacker: 'ST',
+}
+
+const FLAG_BY_NATIONALITY: Record<string, string> = {
+  Brazil: '🇧🇷', Uruguay: '🇺🇾', Colombia: '🇨🇴', Argentina: '🇦🇷',
+  Ecuador: '🇪🇨', Venezuela: '🇻🇪', Paraguay: '🇵🇾', Chile: '🇨🇱',
+}
+
+const NAT_PT: Record<string, string> = {
+  Brazil: 'Brasil', Uruguay: 'Uruguai', Colombia: 'Colômbia', Argentina: 'Argentina',
+  Ecuador: 'Equador', Venezuela: 'Venezuela', Paraguay: 'Paraguai', Chile: 'Chile',
+}
+
+function shortName(name: string): string {
+  const parts = name.trim().split(/\s+/)
+  if (parts.length < 2) return name
+  return `${parts[0][0]}. ${parts[parts.length - 1]}`
+}
+
+function mapSquadRowToPlayer(row: DbSquadRow, index: number): Player {
+  const nat = row.nationality ?? 'Brazil'
+  return {
+    id: index + 1,
+    name: row.name,
+    short: shortName(row.name),
+    pos: POS_BY_CATEGORY[row.position] ?? 'CM',
+    rating: 0,
+    votes: 0,
+    flag: FLAG_BY_NATIONALITY[nat] ?? '⚽',
+    rarity: 'bronze',
+    num: row.number ? parseInt(row.number, 10) : 0,
+    goals: 0,
+    assists: 0,
+    matches: 0,
+    trend: 'stable',
+    nat: NAT_PT[nat] ?? nat,
+    age: 0,
+    photo: row.photo ?? undefined,
+  }
+}
+
+function fmtFixtureDate(iso: string): string {
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return iso
+  return d.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })
+}
+
+function mapFixtureRowToMatch(row: DbFixtureRow, index: number): Match {
+  return {
+    id: index + 1,
+    home: row.home_team,
+    away: row.away_team,
+    homeScore: row.home_score ?? 0,
+    awayScore: row.away_score ?? 0,
+    date: fmtFixtureDate(row.fixture_date),
+    comp: row.competition,
+    status: row.status === 'finished' ? 'finished' : 'upcoming',
+    venue: row.stadium ?? '',
+    round: '',
+  }
+}
+
+interface DbStandingRow {
+  position: number
+  team: string
+  played: number
+  wins: number
+  draws: number
+  losses: number
+  goals_for: number
+  goals_against: number
+  goal_diff: number
+  points: number
+  is_cruzeiro: boolean
+}
+
+interface DbCompetitionStatus {
+  id: string
+  competition: string
+  status: string | null
+  stage: string | null
+  next_match: string | null
+  next_date: string | null
+  sort: number
+}
+
+interface JeanData {
+  players: Player[]
+  matches: Match[]
+  standings: DbStandingRow[]
+  competitions: DbCompetitionStatus[]
+  loading: boolean
+}
+
+const DataContext = createContext<JeanData>({ players: MOCK_PLAYERS, matches: MOCK_MATCHES, standings: [], competitions: [], loading: true })
+
+function useData(): JeanData {
+  return useContext(DataContext)
+}
+
+async function supaGet<T>(path: string): Promise<T> {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+    headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
+  })
+  if (!res.ok) throw new Error(`Supabase ${res.status}`)
+  return res.json() as Promise<T>
+}
+
+function DataProvider({ children }: { children: ReactNode }) {
+  const [players, setPlayers] = useState<Player[]>(MOCK_PLAYERS)
+  const [matches, setMatches] = useState<Match[]>(MOCK_MATCHES)
+  const [standings, setStandings] = useState<DbStandingRow[]>([])
+  const [competitions, setCompetitions] = useState<DbCompetitionStatus[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let active = true
+    ;(async () => {
+      try {
+        const [squad, fixtures] = await Promise.all([
+          supaGet<DbSquadRow[]>('squad?select=id,name,position,number,photo,nationality&order=name.asc'),
+          supaGet<DbFixtureRow[]>('fixtures?select=id,home_team,away_team,home_score,away_score,fixture_date,ts,competition,stadium,status'),
+        ])
+        if (!active) return
+        if (squad.length > 0) {
+          setPlayers(squad.map(mapSquadRowToPlayer))
+        }
+        if (fixtures.length > 0) {
+          // Most recent results first, then upcoming fixtures in chronological order.
+          const finished = fixtures.filter((f) => f.status === 'finished').sort((a, b) => b.ts - a.ts)
+          const upcoming = fixtures.filter((f) => f.status !== 'finished').sort((a, b) => a.ts - b.ts)
+          setMatches([...finished, ...upcoming].map(mapFixtureRowToMatch))
+        }
+      } catch (err) {
+        console.error('Failed to load JeanScore data from Supabase', err)
+      }
+
+      // Standings + competition status are optional (tables may not exist yet).
+      try {
+        const s = await supaGet<DbStandingRow[]>('standings?select=*&order=position.asc')
+        if (active && s.length > 0) setStandings(s)
+      } catch { /* standings table not available */ }
+      try {
+        const c = await supaGet<DbCompetitionStatus[]>('competition_status?select=*&order=sort.asc')
+        if (active && c.length > 0) setCompetitions(c)
+      } catch { /* competition_status table not available */ }
+
+      if (active) setLoading(false)
+    })()
+    return () => {
+      active = false
+    }
+  }, [])
+
+  return (
+    <DataContext.Provider value={{ players, matches, standings, competitions, loading }}>
+      {children}
+    </DataContext.Provider>
+  )
+}
 
 // ─── Small Components ─────────────────────────────────────────────────────────
 
@@ -280,6 +478,10 @@ function PlayerCard({ player, onClick, rank, compact }: { player: Player; onClic
         <div className="absolute inset-0 flex items-center justify-center">
           <span className="font-display font-black opacity-[0.08] select-none text-white" style={{ fontSize: compact ? 62 : 74, lineHeight: 1 }}>{player.num}</span>
         </div>
+        {player.photo && (
+          <img src={player.photo} alt={player.name}
+            className="absolute inset-0 w-full h-full object-cover object-top select-none" draggable={false} />
+        )}
         {player.rarity === 'legendary' && (
           <div className="absolute inset-0" style={{ background: 'linear-gradient(180deg, rgba(26,95,204,0.25) 0%, transparent 60%, rgba(196,151,42,0.2) 100%)' }} />
         )}
@@ -586,8 +788,33 @@ function HomePage({ setPage, setSelectedPlayer, setSelectedMatch }: {
   setSelectedPlayer: (p: Player) => void
   setSelectedMatch: (m: Match) => void
 }) {
-  const liveMatch = MATCHES[0]
+  const { players: PLAYERS, matches: MATCHES, standings, competitions } = useData()
   const topPlayers = PLAYERS.slice(0, 5)
+  // Featured match for the hero: the next upcoming fixture, else the most recent result.
+  const featured = MATCHES.find(m => m.status === 'upcoming') ?? MATCHES.find(m => m.status === 'finished') ?? MATCHES[0] ?? MOCK_MATCHES[0]
+  const cruzHome = isCruzeiro(featured.home)
+  const opponent = cruzHome ? featured.away : featured.home
+  const cruzScore = cruzHome ? featured.homeScore : featured.awayScore
+  const oppScore = cruzHome ? featured.awayScore : featured.homeScore
+  const featuredFinished = featured.status === 'finished'
+
+  // Real season summary computed from finished fixtures.
+  const finishedMatches = MATCHES.filter(m => m.status === 'finished')
+  let wins = 0, draws = 0, goalsFor = 0
+  for (const m of finishedMatches) {
+    const home = isCruzeiro(m.home)
+    const cs = home ? m.homeScore : m.awayScore
+    const os = home ? m.awayScore : m.homeScore
+    goalsFor += cs
+    if (cs > os) wins++
+    else if (cs === os) draws++
+  }
+  const points = wins * 3 + draws
+  const efficiency = finishedMatches.length > 0 ? Math.round((points / (finishedMatches.length * 3)) * 100) : 0
+
+  const nextMatch = MATCHES.find(m => m.status === 'upcoming') ?? null
+  const nextOpp = nextMatch ? (isCruzeiro(nextMatch.home) ? nextMatch.away : nextMatch.home) : ''
+
   const [activeForm, setActiveForm] = useState<'W' | 'D' | 'L' | null>(null)
 
   return (
@@ -596,10 +823,10 @@ function HomePage({ setPage, setSelectedPlayer, setSelectedMatch }: {
       <div className="relative overflow-hidden" style={{ minHeight: 500 }}>
         {/* Background layers */}
         <img
-          src="https://images.unsplash.com/photo-1551698618-1dfe5d97d256?w=1600&h=700&fit=crop&auto=format"
-          alt="Mineirão Stadium at night"
+          src={fotoFundoInicio}
+          alt="Fundo Início"
           className="absolute inset-0 w-full h-full object-cover"
-          style={{ filter: 'brightness(0.28) saturate(0.7)' }}
+          style={{ filter: 'brightness(0.55) saturate(0.85)' }}
         />
         {/* Blue cast from Cruzeiro side */}
         <div className="absolute inset-0" style={{ background: 'linear-gradient(105deg, rgba(0,40,100,0.75) 0%, rgba(0,15,40,0.5) 45%, rgba(3,9,16,0.2) 100%)' }} />
@@ -616,44 +843,54 @@ function HomePage({ setPage, setSelectedPlayer, setSelectedMatch }: {
             <div className="w-5 h-5 flex-shrink-0"><CruzeiroCrest size={20} /></div>
             <span className="font-display font-semibold tracking-widest uppercase"
               style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', letterSpacing: '0.15em' }}>
-              Brasileirão Série A · Rodada 18
+              {featured.comp} · {featured.date}
             </span>
           </div>
 
           {/* Main score layout */}
           <div className="flex items-center gap-0">
-            {/* Home team */}
+            {/* Cruzeiro */}
             <div className="flex flex-col items-center gap-4" style={{ minWidth: 160 }}>
-              <div className="relative">
-                <div className="w-20 h-20 rounded-3xl flex items-center justify-center"
-                  style={{ background: 'linear-gradient(135deg, rgba(0,48,135,0.9), rgba(26,95,204,0.6))', border: '1px solid rgba(26,95,204,0.5)', boxShadow: '0 0 30px rgba(26,95,204,0.3)' }}>
-                  <CruzeiroCrest size={44} />
-                </div>
-                <div className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full flex items-center justify-center"
-                  style={{ background: '#EF4444', border: '2px solid #050D1B' }}>
-                  <span className="text-white font-black" style={{ fontSize: 7 }}>AO</span>
-                </div>
+              <div className="w-20 h-20 rounded-3xl flex items-center justify-center"
+                style={{ background: 'linear-gradient(135deg, rgba(0,48,135,0.9), rgba(26,95,204,0.6))', border: '1px solid rgba(26,95,204,0.5)', boxShadow: '0 0 30px rgba(26,95,204,0.3)' }}>
+                <CruzeiroCrest size={44} />
               </div>
               <span className="font-display font-black text-white" style={{ fontSize: 18 }}>Cruzeiro</span>
             </div>
 
             {/* Score center */}
             <div className="flex-1 flex flex-col items-center gap-3">
-              <LiveBadge minute={liveMatch.minute} />
-              <div className="flex items-center gap-4">
-                <span className="font-display font-black text-white" style={{ fontSize: 80, lineHeight: 1, textShadow: '0 0 60px rgba(255,255,255,0.15)' }}>{liveMatch.homeScore}</span>
-                <span className="font-display font-thin" style={{ fontSize: 48, color: 'rgba(255,255,255,0.2)' }}>:</span>
-                <span className="font-display font-black" style={{ fontSize: 80, lineHeight: 1, color: 'rgba(255,255,255,0.45)' }}>{liveMatch.awayScore}</span>
-              </div>
-              <div className="flex items-center gap-3">
+              {featuredFinished ? (
+                <span className="text-[11px] font-bold tracking-wider px-3 py-1 rounded-full"
+                  style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.6)' }}>
+                  ENCERRADO
+                </span>
+              ) : (
+                <span className="text-[11px] font-bold tracking-wider px-3 py-1 rounded-full"
+                  style={{ background: 'rgba(26,95,204,0.2)', border: '1px solid rgba(26,95,204,0.4)', color: '#4A8EE8' }}>
+                  PRÓXIMO JOGO
+                </span>
+              )}
+              {featuredFinished ? (
+                <div className="flex items-center gap-4">
+                  <span className="font-display font-black text-white" style={{ fontSize: 80, lineHeight: 1, textShadow: '0 0 60px rgba(255,255,255,0.15)' }}>{cruzScore}</span>
+                  <span className="font-display font-thin" style={{ fontSize: 48, color: 'rgba(255,255,255,0.2)' }}>:</span>
+                  <span className="font-display font-black" style={{ fontSize: 80, lineHeight: 1, color: 'rgba(255,255,255,0.45)' }}>{oppScore}</span>
+                </div>
+              ) : (
+                <div className="flex flex-col items-center">
+                  <span className="font-display font-black" style={{ fontSize: 56, lineHeight: 1, color: 'rgba(255,255,255,0.9)' }}>VS</span>
+                </div>
+              )}
+              {featured.venue && (
                 <div className="flex items-center gap-1.5">
                   <MapPin size={12} style={{ color: 'rgba(255,255,255,0.35)' }} />
-                  <span className="text-xs" style={{ color: 'rgba(255,255,255,0.35)' }}>{liveMatch.venue}</span>
+                  <span className="text-xs" style={{ color: 'rgba(255,255,255,0.35)' }}>{featured.venue}</span>
                 </div>
-              </div>
+              )}
               <div className="flex gap-2 mt-1">
                 <button
-                  onClick={() => { setSelectedMatch(liveMatch); setPage('match-detail') }}
+                  onClick={() => { setSelectedMatch(featured); setPage('match-detail') }}
                   className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-bold transition-all duration-200"
                   style={{ background: 'linear-gradient(135deg, #003087, #1A5FCC)', color: 'white', boxShadow: '0 4px 16px rgba(26,95,204,0.4)' }}>
                   Ver Partida
@@ -667,27 +904,13 @@ function HomePage({ setPage, setSelectedPlayer, setSelectedMatch }: {
               </div>
             </div>
 
-            {/* Away team */}
+            {/* Opponent */}
             <div className="flex flex-col items-center gap-4" style={{ minWidth: 160 }}>
               <div className="w-20 h-20 rounded-3xl flex items-center justify-center"
                 style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)' }}>
-                <span className="font-black text-white/70 text-2xl">FLA</span>
+                <span className="font-black text-white/70 text-2xl">{opponent.slice(0, 3).toUpperCase()}</span>
               </div>
-              <span className="font-display font-black" style={{ fontSize: 18, color: 'rgba(255,255,255,0.6)' }}>Flamengo</span>
-            </div>
-          </div>
-
-          {/* Goal events */}
-          <div className="flex items-center justify-center gap-4 mt-6">
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg" style={{ background: 'rgba(0,0,0,0.35)', border: '1px solid rgba(255,255,255,0.06)' }}>
-              <span className="text-xs font-bold text-white">Kaio Jorge</span>
-              <span style={{ fontSize: 12 }}>⚽</span>
-              <span className="text-xs" style={{ color: '#5070A0' }}>23'</span>
-            </div>
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg" style={{ background: 'rgba(0,0,0,0.35)', border: '1px solid rgba(255,255,255,0.06)' }}>
-              <span className="text-xs font-bold text-white">M. Pereira</span>
-              <span style={{ fontSize: 12 }}>⚽</span>
-              <span className="text-xs" style={{ color: '#5070A0' }}>51'</span>
+              <span className="font-display font-black text-center" style={{ fontSize: 18, color: 'rgba(255,255,255,0.6)', maxWidth: 150 }}>{opponent}</span>
             </div>
           </div>
         </div>
@@ -698,10 +921,10 @@ function HomePage({ setPage, setSelectedPlayer, setSelectedMatch }: {
         {/* Season stats row */}
         <div className="grid grid-cols-4 gap-3 -mt-4">
           {[
-            { icon: Trophy, label: '6°', sub: 'Classificação', color: '#C4972A' },
-            { icon: Flame, label: '5V', sub: 'Sequência invicto', color: '#EF4444' },
-            { icon: Target, label: '38', sub: 'Gols marcados', color: '#22C55E' },
-            { icon: Activity, label: '7.6', sub: 'Nota média squad', color: '#4A8EE8' },
+            { icon: Trophy, label: `${finishedMatches.length}`, sub: 'Jogos disputados', color: '#C4972A' },
+            { icon: Flame, label: `${wins}`, sub: 'Vitórias', color: '#EF4444' },
+            { icon: Target, label: `${goalsFor}`, sub: 'Gols marcados', color: '#22C55E' },
+            { icon: Activity, label: `${efficiency}%`, sub: 'Aproveitamento', color: '#4A8EE8' },
           ].map(({ icon: Icon, label, sub, color }) => (
             <div key={sub} className="rounded-2xl p-4 flex flex-col gap-2"
               style={{ background: 'rgba(10,21,40,0.95)', border: '1px solid rgba(255,255,255,0.06)', backdropFilter: 'blur(10px)' }}>
@@ -734,25 +957,76 @@ function HomePage({ setPage, setSelectedPlayer, setSelectedMatch }: {
         </section>
 
         {/* Competitions */}
-        <section>
-          <div className="flex items-center justify-between mb-5">
-            <div>
-              <h2 className="font-display font-black text-white" style={{ fontSize: 20 }}>Competições</h2>
-              <p className="text-xs mt-0.5" style={{ color: '#5070A0' }}>Classificação atual do Cruzeiro</p>
+        {(competitions.length > 0 || standings.length > 0) && (
+          <section>
+            <div className="flex items-center justify-between mb-5">
+              <div>
+                <h2 className="font-display font-black text-white" style={{ fontSize: 20 }}>Competições</h2>
+                <p className="text-xs mt-0.5" style={{ color: '#5070A0' }}>Classificação e status atual do Cruzeiro</p>
+              </div>
             </div>
-          </div>
-          <div className="flex gap-4 overflow-x-auto pb-2">
-            <CompetitionCard name="Brasileirão Série A" abbr="BRA" position={6} played={18} points={29}
-              form={['W', 'W', 'W', 'D', 'W']} color="#4A8EE8"
-              bg="linear-gradient(135deg, rgba(26,95,204,0.12), rgba(3,9,16,0.9))" />
-            <CompetitionCard name="Copa do Brasil" abbr="CB" position={4} played={4} points={0}
-              form={['W', 'W', 'D', 'W']} color="#22C55E"
-              bg="linear-gradient(135deg, rgba(34,197,94,0.10), rgba(3,9,16,0.9))" />
-            <CompetitionCard name="Copa Libertadores" abbr="LIB" position={2} played={6} points={12}
-              form={['W', 'D', 'W', 'W', 'L']} color="#C4972A"
-              bg="linear-gradient(135deg, rgba(196,151,42,0.12), rgba(3,9,16,0.9))" />
-          </div>
-        </section>
+
+            {/* Cup competition status cards */}
+            {competitions.length > 0 && (
+              <div className="flex gap-4 overflow-x-auto pb-2 mb-6">
+                {competitions.map(c => (
+                  <div key={c.id} className="rounded-2xl p-4 flex-shrink-0" style={{ width: 230, background: 'linear-gradient(135deg, rgba(26,95,204,0.12), rgba(3,9,16,0.9))', border: '1px solid rgba(255,255,255,0.08)' }}>
+                    <div className="font-display font-bold text-white mb-3" style={{ fontSize: 13 }}>{c.competition}</div>
+                    {[
+                      { l: 'Status', v: c.status },
+                      { l: 'Fase', v: c.stage },
+                      { l: 'Próximo jogo', v: c.next_match },
+                      { l: 'Data', v: c.next_date },
+                    ].map(({ l, v }) => (
+                      <div key={l} className="flex items-center justify-between gap-2 py-1">
+                        <span className="text-[11px]" style={{ color: '#5070A0' }}>{l}</span>
+                        <span className="text-[11px] font-semibold text-right text-white" style={{ maxWidth: 130 }}>{v ?? '—'}</span>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Brasileirão full standings table */}
+            {standings.length > 0 && (
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="font-display font-bold text-white" style={{ fontSize: 15 }}>Classificação — Brasileirão</h3>
+                </div>
+                <div className="rounded-2xl overflow-x-auto" style={{ background: '#0A1528', border: '1px solid rgba(255,255,255,0.06)' }}>
+                  <div style={{ minWidth: 520 }}>
+                    {/* Header */}
+                    <div className="grid items-center px-4 py-2.5" style={{ gridTemplateColumns: '28px minmax(120px,1fr) repeat(8, 34px)', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+                      <span className="text-[10px] font-bold uppercase" style={{ color: '#3A5070' }}>#</span>
+                      <span className="text-[10px] font-bold uppercase" style={{ color: '#3A5070' }}>Time</span>
+                      {['J', 'V', 'E', 'D', 'GP', 'GC', 'SG', 'Pts'].map(h => (
+                        <span key={h} className="text-[10px] font-bold uppercase text-center" style={{ color: h === 'Pts' ? '#4A8EE8' : '#3A5070' }}>{h}</span>
+                      ))}
+                    </div>
+                    {standings.map((row, i) => (
+                      <div key={row.position}
+                        className="grid items-center px-4 py-2.5"
+                        style={{
+                          gridTemplateColumns: '28px minmax(120px,1fr) repeat(8, 34px)',
+                          background: row.is_cruzeiro ? 'rgba(26,95,204,0.12)' : 'transparent',
+                          borderBottom: i < standings.length - 1 ? '1px solid rgba(255,255,255,0.04)' : 'none',
+                          borderLeft: row.is_cruzeiro ? '2px solid #1A5FCC' : '2px solid transparent',
+                        }}
+                      >
+                        <span className="font-display font-black" style={{ fontSize: 12, color: row.is_cruzeiro ? '#4A8EE8' : '#3A4A5A' }}>{row.position}</span>
+                        <span className="font-display font-semibold truncate" style={{ fontSize: 13, color: row.is_cruzeiro ? 'white' : '#8098B0' }}>{row.team}</span>
+                        {[row.played, row.wins, row.draws, row.losses, row.goals_for, row.goals_against, row.goal_diff, row.points].map((val, k) => (
+                          <span key={k} className="font-display text-center" style={{ fontSize: 12, fontWeight: k === 7 ? 900 : 500, color: k === 7 ? (row.is_cruzeiro ? '#4A8EE8' : 'white') : '#7090B0' }}>{val}</span>
+                        ))}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+          </section>
+        )}
 
         {/* Two-column: Recent results + Upcoming */}
         <div className="grid grid-cols-2 gap-6">
@@ -784,66 +1058,23 @@ function HomePage({ setPage, setSelectedPlayer, setSelectedMatch }: {
                     </div>
                     <div className="font-display font-black text-white" style={{ fontSize: 15 }}>Cruzeiro</div>
                     <div className="flex flex-col items-center flex-1">
-                      <div className="flex gap-2">
-                        {[{ v: '05', l: 'D' }, { v: '14', l: 'H' }, { v: '32', l: 'M' }].map(({ v, l }) => (
-                          <div key={l} className="flex flex-col items-center rounded-lg px-2 py-1.5"
-                            style={{ background: 'rgba(0,0,0,0.3)', minWidth: 36 }}>
-                            <span className="font-display font-black text-white" style={{ fontSize: 18, lineHeight: 1 }}>{v}</span>
-                            <span style={{ fontSize: 8, color: '#5070A0' }}>{l}</span>
-                          </div>
-                        ))}
-                      </div>
-                      <span className="text-[10px] mt-1" style={{ color: '#3A5070' }}>20 Jul · 16h00</span>
+                      <span className="font-display font-black" style={{ fontSize: 20, color: '#4A8EE8' }}>VS</span>
+                      <span className="text-[10px] mt-1" style={{ color: '#3A5070' }}>{nextMatch?.date ?? ''}</span>
                     </div>
-                    <div className="font-display font-black" style={{ fontSize: 15, color: '#8098B0' }}>Internacional</div>
+                    <div className="font-display font-black text-right" style={{ fontSize: 15, color: '#8098B0', maxWidth: 90 }}>{nextOpp}</div>
                     <div className="w-10 h-10 rounded-xl flex items-center justify-center"
                       style={{ background: 'rgba(255,255,255,0.06)' }}>
-                      <span className="font-bold text-white/60 text-xs">INT</span>
+                      <span className="font-bold text-white/60 text-xs">{nextOpp.slice(0, 3).toUpperCase()}</span>
                     </div>
                   </div>
                   <div className="flex items-center gap-1.5 pt-3" style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}>
                     <MapPin size={11} style={{ color: '#3A5070' }} />
-                    <span className="text-[11px]" style={{ color: '#3A5070' }}>Mineirão · 48.234 ingressos vendidos</span>
+                    <span className="text-[11px]" style={{ color: '#3A5070' }}>{nextMatch ? `${nextMatch.venue} · ${nextMatch.comp}` : 'Sem jogos futuros'}</span>
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* Mini standings */}
-            <div>
-              <div className="flex items-center justify-between mb-3">
-                <h2 className="font-display font-bold text-white" style={{ fontSize: 16 }}>Classificação</h2>
-                <span className="text-[10px] font-semibold tracking-wider uppercase" style={{ color: '#3A5070' }}>Série A</span>
-              </div>
-              <div className="rounded-2xl overflow-hidden" style={{ background: '#0A1528', border: '1px solid rgba(255,255,255,0.06)' }}>
-                {[
-                  { pos: 1, team: 'Botafogo', pts: 37, isCruz: false },
-                  { pos: 2, team: 'Flamengo', pts: 34, isCruz: false },
-                  { pos: 3, team: 'Atlético-MG', pts: 32, isCruz: false },
-                  { pos: 4, team: 'Palmeiras', pts: 31, isCruz: false },
-                  { pos: 5, team: 'São Paulo', pts: 30, isCruz: false },
-                  { pos: 6, team: 'Cruzeiro', pts: 29, isCruz: true },
-                  { pos: 7, team: 'Corinthians', pts: 27, isCruz: false },
-                ].map((row, i, arr) => (
-                  <div key={row.pos}
-                    className="flex items-center gap-3 px-4 py-2.5"
-                    style={{
-                      background: row.isCruz ? 'rgba(26,95,204,0.12)' : 'transparent',
-                      borderBottom: i < arr.length - 1 ? '1px solid rgba(255,255,255,0.04)' : 'none',
-                      borderLeft: row.isCruz ? '2px solid #1A5FCC' : '2px solid transparent',
-                    }}
-                  >
-                    <span className="font-display font-black w-5 text-center" style={{ fontSize: 13, color: row.isCruz ? '#4A8EE8' : '#3A4A5A' }}>{row.pos}</span>
-                    <div className="w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0"
-                      style={{ background: row.isCruz ? 'linear-gradient(135deg, #003087, #1A5FCC)' : 'rgba(255,255,255,0.06)' }}>
-                      {row.isCruz ? <CruzeiroCrest size={14} /> : <span className="font-bold text-white/40" style={{ fontSize: 7 }}>{row.team.slice(0, 2)}</span>}
-                    </div>
-                    <span className="flex-1 font-display font-semibold" style={{ fontSize: 13, color: row.isCruz ? 'white' : '#7090B0' }}>{row.team}</span>
-                    <span className="font-display font-black" style={{ fontSize: 14, color: row.isCruz ? '#4A8EE8' : '#5070A0' }}>{row.pts}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
           </section>
         </div>
 
@@ -854,39 +1085,17 @@ function HomePage({ setPage, setSelectedPlayer, setSelectedMatch }: {
               <h2 className="font-display font-black text-white" style={{ fontSize: 20 }}>Avaliações Recentes</h2>
               <p className="text-xs mt-0.5" style={{ color: '#5070A0' }}>O que a torcida está dizendo agora</p>
             </div>
-            <span className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg"
-              style={{ background: 'rgba(239,68,68,0.12)', color: '#FF6060', border: '1px solid rgba(239,68,68,0.2)' }}>
-              <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-live-pulse" /> LIVE
-            </span>
           </div>
-          <div className="space-y-2">
-            {[
-              { user: 'rodrigo_cruzeiro', player: 'Matheus Pereira', rating: 9.5, text: 'Absurdo o que ele fez hoje! Gênio absoluto', rarity: 'legendary' as Rarity, time: '2min' },
-              { user: 'raposa_eterna', player: 'Kaio Jorge', rating: 8.0, text: 'Gol importante mas precisa melhorar as finalizações', rarity: 'gold' as Rarity, time: '5min' },
-              { user: 'cabuloso_bh', player: 'Cássio', rating: 8.8, text: 'Defesa incrível no segundo tempo. Salvou o jogo!', rarity: 'gold' as Rarity, time: '8min' },
-              { user: 'mineiro_fiel', player: 'Lucas Silva', rating: 7.2, text: 'Sólido no meio campo, controla bem o ritmo', rarity: 'silver' as Rarity, time: '11min' },
-            ].map((feed, i) => (
-              <div key={i} className="flex items-start gap-3 rounded-2xl px-4 py-3.5"
-                style={{ background: '#0A1528', border: '1px solid rgba(255,255,255,0.05)' }}>
-                <div className="w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center font-display font-black text-xs text-white"
-                  style={{ background: 'linear-gradient(135deg, #003087, #1A5FCC)' }}>
-                  {feed.user[0].toUpperCase()}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-xs font-semibold" style={{ color: '#8098B0' }}>@{feed.user}</span>
-                    <span className="text-xs" style={{ color: '#3A5070' }}>avaliou</span>
-                    <span className="text-xs font-semibold text-white">{feed.player}</span>
-                    <span className="px-1.5 py-0.5 rounded text-xs font-black"
-                      style={{ background: RARITY_CFG[feed.rarity].accent + '20', color: RARITY_CFG[feed.rarity].accent }}>
-                      {feed.rating.toFixed(1)}
-                    </span>
-                    <span className="text-xs ml-auto" style={{ color: '#2A3A50' }}>{feed.time}</span>
-                  </div>
-                  <p className="text-xs mt-1" style={{ color: '#5070A0' }}>{feed.text}</p>
-                </div>
-              </div>
-            ))}
+          <div className="rounded-2xl px-6 py-10 flex flex-col items-center text-center gap-2"
+            style={{ background: '#0A1528', border: '1px solid rgba(255,255,255,0.05)' }}>
+            <Vote size={26} style={{ color: '#2A3A50' }} />
+            <p className="font-display font-bold text-white" style={{ fontSize: 15 }}>Ainda não há avaliações</p>
+            <p className="text-xs" style={{ color: '#5070A0', maxWidth: 340 }}>Seja o primeiro a avaliar os jogadores. As notas da torcida vão aparecer aqui.</p>
+            <button onClick={() => setPage('rate')}
+              className="mt-2 flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-bold"
+              style={{ background: 'linear-gradient(135deg, #003087, #1A5FCC)', color: 'white' }}>
+              <Star size={13} /> Avaliar agora
+            </button>
           </div>
         </section>
       </div>
@@ -897,6 +1106,7 @@ function HomePage({ setPage, setSelectedPlayer, setSelectedMatch }: {
 // ─── Rankings Page ────────────────────────────────────────────────────────────
 
 function RankingsPage({ setPage, setSelectedPlayer }: { setPage: (p: Page) => void; setSelectedPlayer: (p: Player) => void }) {
+  const { players: PLAYERS } = useData()
   const [filter, setFilter] = useState<'all' | 'GK' | 'DEF' | 'MID' | 'ATK'>('all')
   const [sortBy, setSortBy] = useState<'rating' | 'votes'>('rating')
 
@@ -995,6 +1205,10 @@ function PodiumCard({ player, rank, onClick, elevated }: { player: Player; rank:
           <div className="absolute inset-0 flex items-center justify-center">
             <span className="font-display font-black opacity-[0.08] text-white select-none" style={{ fontSize: elevated ? 68 : 56 }}>{player.num}</span>
           </div>
+          {player.photo && (
+            <img src={player.photo} alt={player.name}
+              className="absolute inset-0 w-full h-full object-cover object-top select-none" draggable={false} />
+          )}
         </div>
         <div className="absolute top-2 left-2 font-display font-black" style={{ fontSize: 12, color: m.color }}>#{rank}</div>
         <div className="font-display font-extrabold text-white truncate" style={{ fontSize: elevated ? 11 : 10 }}>{player.short}</div>
@@ -1030,9 +1244,11 @@ function RankingRow({ player, rank, onClick }: { player: Player; rank: number; o
     >
       <span className="font-display font-black w-6 text-center" style={{ fontSize: 15, color: '#2A3A50' }}>#{rank}</span>
       <div className="w-10 h-10 rounded-xl overflow-hidden flex-shrink-0" style={{ background: cfg.photoGrad }}>
-        <div className="w-full h-full flex items-center justify-center">
-          <span className="font-display font-black opacity-25 text-white" style={{ fontSize: 20 }}>{player.num}</span>
-        </div>
+        {player.photo
+          ? <img src={player.photo} alt={player.name} className="w-full h-full object-cover object-top select-none" draggable={false} />
+          : <div className="w-full h-full flex items-center justify-center">
+              <span className="font-display font-black opacity-25 text-white" style={{ fontSize: 20 }}>{player.num}</span>
+            </div>}
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
@@ -1059,6 +1275,7 @@ function RankingRow({ player, rank, onClick }: { player: Player; rank: number; o
 // ─── Players Page ─────────────────────────────────────────────────────────────
 
 function PlayersPage({ setPage, setSelectedPlayer }: { setPage: (p: Page) => void; setSelectedPlayer: (p: Player) => void }) {
+  const { players: PLAYERS } = useData()
   const [search, setSearch] = useState('')
   const [rarityFilter, setRarityFilter] = useState<Rarity | 'all'>('all')
 
@@ -1115,21 +1332,35 @@ function PlayersPage({ setPage, setSelectedPlayer }: { setPage: (p: Page) => voi
 // ─── Matches Page ─────────────────────────────────────────────────────────────
 
 function MatchesPage({ setPage, setSelectedMatch }: { setPage: (p: Page) => void; setSelectedMatch: (m: Match) => void }) {
-  const [tab, setTab] = useState<'all' | 'live' | 'finished' | 'upcoming'>('all')
-  const filtered = MATCHES.filter(m => tab === 'all' || m.status === tab)
+  const { matches: MATCHES } = useData()
+  const [tab, setTab] = useState<'all' | 'finished' | 'upcoming'>('all')
+  const [comp, setComp] = useState<string>('all')
+  const competitions = Array.from(new Set(MATCHES.map(m => m.comp)))
+  const filtered = MATCHES.filter(m =>
+    (tab === 'all' || m.status === tab) && (comp === 'all' || m.comp === comp)
+  )
   return (
     <div className="px-6 pb-12">
       <div className="pt-8 pb-6">
         <h2 className="font-display font-black text-white mb-1" style={{ fontSize: 32 }}>Partidas</h2>
-        <p className="text-sm" style={{ color: '#5070A0' }}>Brasileirão Série A · 2024</p>
       </div>
-      <div className="flex gap-2 mb-7">
-        {(['all', 'live', 'finished', 'upcoming'] as const).map(t => (
+      {/* Status filter */}
+      <div className="flex gap-2 mb-3">
+        {(['all', 'finished', 'upcoming'] as const).map(t => (
           <button key={t} onClick={() => setTab(t)}
             className="px-4 py-2 rounded-xl text-xs font-semibold transition-all duration-150 flex items-center gap-1.5"
             style={{ background: tab === t ? '#003087' : 'rgba(255,255,255,0.04)', color: tab === t ? 'white' : '#5070A0', border: tab === t ? '1px solid #1A5FCC' : '1px solid transparent' }}>
-            {t === 'live' && <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-live-pulse" />}
-            {{ all: 'Todas', live: 'Ao Vivo', finished: 'Encerradas', upcoming: 'Próximas' }[t]}
+            {{ all: 'Todas', finished: 'Encerradas', upcoming: 'Próximas' }[t]}
+          </button>
+        ))}
+      </div>
+      {/* Competition filter */}
+      <div className="flex gap-2 mb-7 flex-wrap">
+        {['all', ...competitions].map(c => (
+          <button key={c} onClick={() => setComp(c)}
+            className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-150"
+            style={{ background: comp === c ? 'rgba(26,95,204,0.18)' : 'rgba(255,255,255,0.04)', color: comp === c ? '#4A8EE8' : '#5070A0', border: comp === c ? '1px solid rgba(26,95,204,0.4)' : '1px solid rgba(255,255,255,0.05)' }}>
+            {c === 'all' ? 'Todas as competições' : c}
           </button>
         ))}
       </div>
@@ -1190,7 +1421,7 @@ function PlayerProfilePage({ player, onBack }: { player: Player; onBack: () => v
               <div className="flex items-center gap-3 mt-2.5">
                 <PosBadge pos={player.pos} />
                 <span className="text-sm" style={{ color: '#5070A0' }}>{player.nat}</span>
-                <span className="text-sm" style={{ color: '#5070A0' }}>{player.age} anos</span>
+                {player.age > 0 && <span className="text-sm" style={{ color: '#5070A0' }}>{player.age} anos</span>}
                 <span className="text-sm" style={{ color: '#5070A0' }}>#{player.num}</span>
               </div>
 
@@ -1335,7 +1566,7 @@ function PlayerProfilePage({ player, onBack }: { player: Player; onBack: () => v
               { label: 'Nome Completo', value: player.name },
               { label: 'Posição', value: player.pos },
               { label: 'Nacionalidade', value: player.nat },
-              { label: 'Idade', value: `${player.age} anos` },
+              { label: 'Idade', value: player.age > 0 ? `${player.age} anos` : '—' },
               { label: 'Número', value: `#${player.num}` },
               { label: 'Raridade', value: RARITY_CFG[player.rarity].label },
               { label: 'Total de Votos', value: player.votes.toLocaleString('pt-BR') },
@@ -1356,6 +1587,7 @@ function PlayerProfilePage({ player, onBack }: { player: Player; onBack: () => v
 // ─── Match Detail Page ────────────────────────────────────────────────────────
 
 function MatchDetailPage({ match, onBack }: { match: Match; onBack: () => void }) {
+  const { players: PLAYERS } = useData()
   const [tab, setTab] = useState<'lineup' | 'stats'>('lineup')
   return (
     <div className="pb-12">
@@ -1421,9 +1653,12 @@ function MatchDetailPage({ match, onBack }: { match: Match; onBack: () => void }
               {PLAYERS.slice(0, 8).map(p => (
                 <div key={p.id} className="flex items-center gap-3 px-3 py-2.5 rounded-xl"
                   style={{ background: '#0A1528', border: '1px solid rgba(255,255,255,0.05)' }}>
-                  <div className="w-8 h-8 rounded-lg overflow-hidden flex-shrink-0"
+                  <div className="relative w-8 h-8 rounded-lg overflow-hidden flex-shrink-0"
                     style={{ background: RARITY_CFG[p.rarity].photoGrad }}>
                     <div className="w-full h-full flex items-center justify-center font-display font-black opacity-30 text-white" style={{ fontSize: 14 }}>{p.num}</div>
+                    {p.photo && (
+                      <img src={p.photo} alt={p.name} className="absolute inset-0 w-full h-full object-cover object-top select-none" draggable={false} />
+                    )}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="text-xs font-semibold text-white truncate">{p.short}</div>
@@ -1472,6 +1707,8 @@ function MatchDetailPage({ match, onBack }: { match: Match; onBack: () => void }
 // ─── Rating Page ──────────────────────────────────────────────────────────────
 
 function RatingPage() {
+  const { players: PLAYERS, matches: MATCHES } = useData()
+  const lastFinished = MATCHES.find(m => m.status === 'finished') ?? null
   const [currentIdx, setCurrentIdx] = useState(0)
   const [ratings, setRatings] = useState<Record<number, number>>({})
   const [hoveredRating, setHoveredRating] = useState<number | null>(null)
@@ -1535,10 +1772,9 @@ function RatingPage() {
         <div className="flex items-center justify-between mb-3">
           <div>
             <h2 className="font-display font-black text-white" style={{ fontSize: 22 }}>Votar</h2>
-            <p className="text-xs mt-0.5" style={{ color: '#5070A0' }}>Cruzeiro × Flamengo · 67'</p>
+            <p className="text-xs mt-0.5" style={{ color: '#5070A0' }}>{lastFinished ? `${lastFinished.home} × ${lastFinished.away} · ${lastFinished.date}` : 'Avalie os jogadores do Cruzeiro'}</p>
           </div>
           <div className="flex items-center gap-3">
-            <LiveBadge minute={67} />
             <span className="font-display font-bold" style={{ color: '#3A5070', fontSize: 13 }}>{Object.keys(ratings).length}/{PLAYERS.length} avaliados</span>
           </div>
         </div>
@@ -1561,7 +1797,7 @@ function RatingPage() {
               <h3 className="font-display font-black text-white" style={{ fontSize: 20 }}>{player.name}</h3>
               <div className="flex items-center justify-center gap-2 mt-1.5">
                 <PosBadge pos={player.pos} />
-                <span className="text-sm" style={{ color: '#5070A0' }}>{player.nat} · {player.age} anos</span>
+                <span className="text-sm" style={{ color: '#5070A0' }}>{player.nat}{player.age > 0 ? ` · ${player.age} anos` : ''}</span>
               </div>
             </div>
 
@@ -1649,6 +1885,9 @@ function RatingPage() {
                   <div className="w-9 h-9 rounded-xl flex-shrink-0 flex items-center justify-center overflow-hidden relative"
                     style={{ background: pcfg.photoGrad, border: `1px solid ${pcfg.border}` }}>
                     <span className="font-display font-black opacity-40 text-white select-none" style={{ fontSize: 16 }}>{p.num}</span>
+                    {p.photo && (
+                      <img src={p.photo} alt={p.name} className="absolute inset-0 w-full h-full object-cover object-top select-none" draggable={false} />
+                    )}
                     {isActive && (
                       <div className="absolute inset-0 rounded-xl" style={{ background: `${pcfg.accent}20`, border: `1px solid ${pcfg.accent}60` }} />
                     )}
@@ -1697,6 +1936,7 @@ function RatingPage() {
 // ─── Admin Page ───────────────────────────────────────────────────────────────
 
 function AdminPage() {
+  const { players: PLAYERS } = useData()
   return (
     <div className="px-6 pb-12">
       <div className="pt-8 pb-6">
@@ -2028,6 +2268,7 @@ export default function App() {
   if (!authed) return <AuthPage onAuth={() => setAuthed(true)} />
 
   return (
+    <DataProvider>
     <div style={{ minHeight: '100vh', backgroundColor: '#050D1B', fontFamily: "'Inter', system-ui, sans-serif" }}>
       <Sidebar page={page} setPage={navigate} />
 
@@ -2056,5 +2297,6 @@ export default function App() {
         )}
       </main>
     </div>
+    </DataProvider>
   )
 }
