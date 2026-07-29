@@ -25,7 +25,7 @@ interface Player {
   id: number; name: string; short: string; pos: Pos; rating: number;
   votes: number; flag: string; rarity: Rarity; num: number; goals: number;
   assists: number; matches: number; trend: 'up' | 'down' | 'stable';
-  nat: string; age: number; cleanSheets?: number; saves?: number; photo?: string; dbId?: string; attrOverall?: number;
+  nat: string; age: number; cleanSheets?: number; saves?: number; photo?: string; dbId?: string; attrOverall?: number; flagCode?: string;
 }
 
 interface Match {
@@ -179,6 +179,12 @@ const NAT_PT: Record<string, string> = {
   Ecuador: 'Equador', Venezuela: 'Venezuela', Paraguay: 'Paraguai', Chile: 'Chile',
 }
 
+/** ISO 3166-1 alpha-2 code per nationality, for the flag image (flagcdn). */
+const NAT_CODE: Record<string, string> = {
+  Brazil: 'br', Uruguay: 'uy', Colombia: 'co', Argentina: 'ar',
+  Ecuador: 'ec', Venezuela: 've', Paraguay: 'py', Chile: 'cl',
+}
+
 function shortName(name: string): string {
   const parts = name.trim().split(/\s+/)
   if (parts.length < 2) return name
@@ -195,6 +201,7 @@ function mapSquadRowToPlayer(row: DbSquadRow, index: number): Player {
     rating: 0,
     votes: 0,
     flag: FLAG_BY_NATIONALITY[nat] ?? '⚽',
+    flagCode: NAT_CODE[nat],
     rarity: 'bronze',
     num: row.number ? parseInt(row.number, 10) : 0,
     goals: 0,
@@ -223,7 +230,8 @@ function mapFixtureRowToMatch(row: DbFixtureRow, index: number): Match {
     awayScore: row.away_score ?? 0,
     date: fmtFixtureDate(row.fixture_date),
     comp: row.competition,
-    status: row.status === 'finished' ? 'finished' : 'upcoming',
+    // Classify by the current date: past kickoff = realizada, future = próxima.
+    status: (row.ts ? row.ts * 1000 : new Date(row.fixture_date).getTime()) <= Date.now() ? 'finished' : 'upcoming',
     venue: row.stadium ?? '',
     round: '',
     dbId: row.id,
@@ -282,11 +290,14 @@ interface JeanData {
   recentRatings: DbRatingRow[]
   ratings: DbRatingRow[]
   attributeRatings: DbAttributeRating[]
+  fixturePlayers: { fixture_id: string; player_id: string }[]
+  squadRows: DbSquadRow[]
+  fixtureRows: DbFixtureRow[]
   loading: boolean
   reload: () => void
 }
 
-const DataContext = createContext<JeanData>({ players: MOCK_PLAYERS, matches: MOCK_MATCHES, standings: [], competitions: [], recentRatings: [], ratings: [], attributeRatings: [], loading: true, reload: () => {} })
+const DataContext = createContext<JeanData>({ players: MOCK_PLAYERS, matches: MOCK_MATCHES, standings: [], competitions: [], recentRatings: [], ratings: [], attributeRatings: [], fixturePlayers: [], squadRows: [], fixtureRows: [], loading: true, reload: () => {} })
 
 function useData(): JeanData {
   return useContext(DataContext)
@@ -308,6 +319,9 @@ function DataProvider({ children }: { children: ReactNode }) {
   const [recentRatings, setRecentRatings] = useState<DbRatingRow[]>([])
   const [ratings, setRatings] = useState<DbRatingRow[]>([])
   const [attributeRatings, setAttributeRatings] = useState<DbAttributeRating[]>([])
+  const [fixturePlayers, setFixturePlayers] = useState<{ fixture_id: string; player_id: string }[]>([])
+  const [squadRows, setSquadRows] = useState<DbSquadRow[]>([])
+  const [fixtureRows, setFixtureRows] = useState<DbFixtureRow[]>([])
   const [loading, setLoading] = useState(true)
   const [tick, setTick] = useState(0)
   const reload = () => setTick((t) => t + 1)
@@ -347,6 +361,8 @@ function DataProvider({ children }: { children: ReactNode }) {
           supaGet<DbFixtureRow[]>('fixtures?select=id,home_team,away_team,home_score,away_score,fixture_date,ts,competition,stadium,status,liberado'),
         ])
         if (!active) return
+        setSquadRows(squad)
+        setFixtureRows(fixtures)
         if (squad.length > 0) {
           setPlayers(squad.map((row, i) => {
             const p = mapSquadRowToPlayer(row, i)
@@ -386,6 +402,10 @@ function DataProvider({ children }: { children: ReactNode }) {
         const c = await supaGet<DbCompetitionStatus[]>('competition_status?select=*&order=sort.asc')
         if (active && c.length > 0) setCompetitions(c)
       } catch { /* competition_status table not available */ }
+      try {
+        const fp = await supaGet<{ fixture_id: string; player_id: string }[]>('fixture_players?select=fixture_id,player_id')
+        if (active) setFixturePlayers(fp)
+      } catch { /* fixture_players table not available */ }
 
       if (active) setLoading(false)
     })()
@@ -395,7 +415,7 @@ function DataProvider({ children }: { children: ReactNode }) {
   }, [tick])
 
   return (
-    <DataContext.Provider value={{ players, matches, standings, competitions, recentRatings, ratings, attributeRatings, loading, reload }}>
+    <DataContext.Provider value={{ players, matches, standings, competitions, recentRatings, ratings, attributeRatings, fixturePlayers, squadRows, fixtureRows, loading, reload }}>
       {children}
     </DataContext.Provider>
   )
@@ -712,8 +732,9 @@ function PlayerCard({ player, onClick, rank, compact }: { player: Player; onClic
           <PosBadge pos={player.pos} />
         </div>
         <div className="flex flex-col items-end gap-1">
-          <span className="text-lg leading-none">{player.flag}</span>
-          {rank && <span className="text-[10px] font-bold" style={{ color: cfg.accent + 'AA' }}>#{rank}</span>}
+          {player.flagCode
+            ? <img src={`https://flagcdn.com/w40/${player.flagCode}.png`} alt={player.nat} style={{ width: 22, height: 15, borderRadius: 2, objectFit: 'cover' }} />
+            : <span className="text-lg leading-none">{player.flag}</span>}
         </div>
       </div>
 
@@ -735,13 +756,9 @@ function PlayerCard({ player, onClick, rank, compact }: { player: Player; onClic
         <div className="absolute inset-x-0 bottom-0 h-8" style={{ background: 'linear-gradient(0deg, rgba(0,0,0,0.65) 0%, transparent 100%)' }} />
       </div>
 
-      {/* Name + trend */}
+      {/* Name */}
       <div className="px-3 pt-2 pb-1">
         <div className="font-display font-bold text-white truncate" style={{ fontSize: compact ? 10 : 12 }}>{player.short}</div>
-        <div className="flex items-center gap-1 mt-0.5">
-          <TrendIcon trend={player.trend} />
-          <span className="text-[10px]" style={{ color: '#5070A0' }}>{fmtVotes(player.votes)}</span>
-        </div>
       </div>
 
       {/* Stats row */}
@@ -1086,13 +1103,15 @@ function HomePage({ setPage, setSelectedPlayer, setSelectedMatch }: {
   const { players: PLAYERS, matches: MATCHES, standings, competitions, recentRatings } = useData()
   const topPlayers = [...PLAYERS].sort((a, b) => b.rating - a.rating).slice(0, 5)
   const playerNameById = (dbId: string) => PLAYERS.find(p => p.dbId === dbId)?.name ?? 'Jogador'
-  // Featured match for the hero: the next upcoming fixture, else the most recent result.
-  const featured = MATCHES.find(m => m.status === 'upcoming') ?? MATCHES.find(m => m.status === 'finished') ?? MATCHES[0] ?? MOCK_MATCHES[0]
-  const cruzHome = isCruzeiro(featured.home)
-  const opponent = cruzHome ? featured.away : featured.home
-  const cruzScore = cruzHome ? featured.homeScore : featured.awayScore
-  const oppScore = cruzHome ? featured.awayScore : featured.homeScore
-  const featuredFinished = featured.status === 'finished'
+  // Hero cards: most recent finished match + next upcoming match.
+  const lastMatch = MATCHES.find(m => m.status === 'finished') ?? null
+  const lastOpp = lastMatch ? (isCruzeiro(lastMatch.home) ? lastMatch.away : lastMatch.home) : ''
+  const lastCruzScore = lastMatch ? (isCruzeiro(lastMatch.home) ? lastMatch.homeScore : lastMatch.awayScore) : 0
+  const lastOppScore = lastMatch ? (isCruzeiro(lastMatch.home) ? lastMatch.awayScore : lastMatch.homeScore) : 0
+  const lastResult = lastMatch
+    ? (lastCruzScore > lastOppScore ? { t: 'VITÓRIA', c: '#22C55E' } : lastCruzScore === lastOppScore ? { t: 'EMPATE', c: '#F59E0B' } : { t: 'DERROTA', c: '#EF4444' })
+    : null
+  const fmtTime = (ts?: number) => (ts ? new Date(ts * 1000).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '')
 
   // Real season summary computed from finished fixtures.
   const finishedMatches = MATCHES.filter(m => m.status === 'finished')
@@ -1110,7 +1129,6 @@ function HomePage({ setPage, setSelectedPlayer, setSelectedMatch }: {
 
   const nextMatch = MATCHES.find(m => m.status === 'upcoming') ?? null
   const nextOpp = nextMatch ? (isCruzeiro(nextMatch.home) ? nextMatch.away : nextMatch.home) : ''
-  const hasOpenVoting = MATCHES.some(m => m.liberado)
 
   const [activeForm, setActiveForm] = useState<'W' | 'D' | 'L' | null>(null)
 
@@ -1135,81 +1153,104 @@ function HomePage({ setPage, setSelectedPlayer, setSelectedMatch }: {
         <div className="absolute" style={{ top: '20%', right: '10%', width: 2, height: '60%', background: 'linear-gradient(180deg, transparent, rgba(196,151,42,0.15), transparent)', transform: 'rotate(12deg)' }} />
 
         <div className="relative z-10 px-6 pt-10 pb-14">
-          {/* Competition tag */}
-          <div className="flex items-center gap-2 mb-8">
-            <div className="w-5 h-5 flex-shrink-0"><CruzeiroCrest size={20} /></div>
-            <span className="font-display font-semibold tracking-widest uppercase"
-              style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', letterSpacing: '0.15em' }}>
-              {featured.comp} · {featured.date}
-            </span>
-          </div>
-
-          {/* Main score layout */}
-          <div className="flex items-center gap-0">
-            {/* Cruzeiro */}
-            <div className="flex flex-col items-center gap-4" style={{ minWidth: 160 }}>
-              <div className="w-20 h-20 rounded-3xl flex items-center justify-center"
-                style={{ background: 'linear-gradient(135deg, rgba(0,48,135,0.9), rgba(26,95,204,0.6))', border: '1px solid rgba(26,95,204,0.5)', boxShadow: '0 0 30px rgba(26,95,204,0.3)' }}>
-                <CruzeiroCrest size={44} />
+          <div className="grid gap-4" style={{ gridTemplateColumns: '1fr 1fr', maxWidth: 780 }}>
+            {/* Último Jogo */}
+            <div className="rounded-2xl p-5" style={{ background: 'rgba(5,13,27,0.62)', border: '1px solid rgba(255,255,255,0.08)', backdropFilter: 'blur(8px)' }}>
+              <div className="flex items-center justify-between mb-4">
+                <span className="text-[10px] font-bold tracking-widest uppercase" style={{ color: '#5A9FEC' }}>Último Jogo</span>
+                {lastMatch && <span className="text-[10px] truncate" style={{ color: 'rgba(255,255,255,0.35)', maxWidth: 130 }}>{lastMatch.comp}</span>}
               </div>
-              <span className="font-display font-black text-white" style={{ fontSize: 18 }}>Cruzeiro</span>
+              {lastMatch ? (
+                <>
+                  <div className="flex items-center justify-center gap-3">
+                    <div className="flex flex-col items-center gap-2" style={{ width: 84 }}>
+                      <div className="w-12 h-12 rounded-2xl flex items-center justify-center" style={{ background: 'linear-gradient(135deg, rgba(0,48,135,0.9), rgba(26,95,204,0.6))', border: '1px solid rgba(26,95,204,0.5)' }}>
+                        <CruzeiroCrest size={30} />
+                      </div>
+                      <span className="font-display font-bold text-white text-center" style={{ fontSize: 12 }}>Cruzeiro</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-display font-black text-white" style={{ fontSize: 40, lineHeight: 1 }}>{lastCruzScore}</span>
+                      <span className="font-display font-thin" style={{ fontSize: 24, color: 'rgba(255,255,255,0.25)' }}>:</span>
+                      <span className="font-display font-black" style={{ fontSize: 40, lineHeight: 1, color: 'rgba(255,255,255,0.5)' }}>{lastOppScore}</span>
+                    </div>
+                    <div className="flex flex-col items-center gap-2" style={{ width: 84 }}>
+                      <div className="w-12 h-12 rounded-2xl flex items-center justify-center" style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)' }}>
+                        <span className="font-black text-white/70 text-sm">{lastOpp.slice(0, 3).toUpperCase()}</span>
+                      </div>
+                      <span className="font-display font-bold text-center" style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)' }}>{lastOpp}</span>
+                    </div>
+                  </div>
+                  {lastResult && (
+                    <div className="flex justify-center mt-3">
+                      <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full" style={{ background: lastResult.c + '20', color: lastResult.c, border: `1px solid ${lastResult.c}40` }}>{lastResult.t}</span>
+                    </div>
+                  )}
+                  {lastMatch.venue && (
+                    <div className="flex items-center justify-center gap-1.5 mt-2">
+                      <MapPin size={11} style={{ color: 'rgba(255,255,255,0.3)' }} />
+                      <span className="text-[11px]" style={{ color: 'rgba(255,255,255,0.3)' }}>{lastMatch.venue}</span>
+                    </div>
+                  )}
+                  <div className="flex gap-2 mt-4 justify-center">
+                    <button onClick={() => { setSelectedMatch(lastMatch); setPage('match-detail') }}
+                      className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-bold"
+                      style={{ background: 'linear-gradient(135deg, #003087, #1A5FCC)', color: 'white', boxShadow: '0 4px 16px rgba(26,95,204,0.4)' }}>
+                      Ver Partida
+                    </button>
+                    {lastMatch.liberado && (
+                      <button onClick={() => setPage('rate')}
+                        className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-bold"
+                        style={{ background: 'rgba(196,151,42,0.18)', color: '#E8C840', border: '1px solid rgba(196,151,42,0.3)' }}>
+                        <Star size={13} /> Avaliar
+                      </button>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <p className="text-sm text-center py-8" style={{ color: 'rgba(255,255,255,0.4)' }}>Nenhum jogo realizado ainda.</p>
+              )}
             </div>
 
-            {/* Score center */}
-            <div className="flex-1 flex flex-col items-center gap-3">
-              {featuredFinished ? (
-                <span className="text-[11px] font-bold tracking-wider px-3 py-1 rounded-full"
-                  style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.6)' }}>
-                  ENCERRADO
-                </span>
-              ) : (
-                <span className="text-[11px] font-bold tracking-wider px-3 py-1 rounded-full"
-                  style={{ background: 'rgba(26,95,204,0.2)', border: '1px solid rgba(26,95,204,0.4)', color: '#4A8EE8' }}>
-                  PRÓXIMO JOGO
-                </span>
-              )}
-              {featuredFinished ? (
-                <div className="flex items-center gap-4">
-                  <span className="font-display font-black text-white" style={{ fontSize: 80, lineHeight: 1, textShadow: '0 0 60px rgba(255,255,255,0.15)' }}>{cruzScore}</span>
-                  <span className="font-display font-thin" style={{ fontSize: 48, color: 'rgba(255,255,255,0.2)' }}>:</span>
-                  <span className="font-display font-black" style={{ fontSize: 80, lineHeight: 1, color: 'rgba(255,255,255,0.45)' }}>{oppScore}</span>
-                </div>
-              ) : (
-                <div className="flex flex-col items-center">
-                  <span className="font-display font-black" style={{ fontSize: 56, lineHeight: 1, color: 'rgba(255,255,255,0.9)' }}>VS</span>
-                </div>
-              )}
-              {featured.venue && (
-                <div className="flex items-center gap-1.5">
-                  <MapPin size={12} style={{ color: 'rgba(255,255,255,0.35)' }} />
-                  <span className="text-xs" style={{ color: 'rgba(255,255,255,0.35)' }}>{featured.venue}</span>
-                </div>
-              )}
-              <div className="flex gap-2 mt-1">
-                <button
-                  onClick={() => { setSelectedMatch(featured); setPage('match-detail') }}
-                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-bold transition-all duration-200"
-                  style={{ background: 'linear-gradient(135deg, #003087, #1A5FCC)', color: 'white', boxShadow: '0 4px 16px rgba(26,95,204,0.4)' }}>
-                  Ver Partida
-                </button>
-                {hasOpenVoting && (
-                  <button
-                    onClick={() => setPage('rate')}
-                    className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-bold transition-all duration-200"
-                    style={{ background: 'rgba(196,151,42,0.18)', color: '#E8C840', border: '1px solid rgba(196,151,42,0.3)' }}>
-                    <Star size={13} /> Avaliar
-                  </button>
-                )}
+            {/* Próximo Jogo */}
+            <div className="rounded-2xl p-5" style={{ background: 'rgba(5,13,27,0.62)', border: '1px solid rgba(255,255,255,0.08)', backdropFilter: 'blur(8px)' }}>
+              <div className="flex items-center justify-between mb-4">
+                <span className="text-[10px] font-bold tracking-widest uppercase" style={{ color: '#E8C840' }}>Próximo Jogo</span>
+                {nextMatch && <span className="text-[10px] truncate" style={{ color: 'rgba(255,255,255,0.35)', maxWidth: 130 }}>{nextMatch.comp}</span>}
               </div>
-            </div>
-
-            {/* Opponent */}
-            <div className="flex flex-col items-center gap-4" style={{ minWidth: 160 }}>
-              <div className="w-20 h-20 rounded-3xl flex items-center justify-center"
-                style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)' }}>
-                <span className="font-black text-white/70 text-2xl">{opponent.slice(0, 3).toUpperCase()}</span>
-              </div>
-              <span className="font-display font-black text-center" style={{ fontSize: 18, color: 'rgba(255,255,255,0.6)', maxWidth: 150 }}>{opponent}</span>
+              {nextMatch ? (
+                <>
+                  <div className="flex items-center justify-center gap-3">
+                    <div className="flex flex-col items-center gap-2" style={{ width: 84 }}>
+                      <div className="w-12 h-12 rounded-2xl flex items-center justify-center" style={{ background: 'linear-gradient(135deg, rgba(0,48,135,0.9), rgba(26,95,204,0.6))', border: '1px solid rgba(26,95,204,0.5)' }}>
+                        <CruzeiroCrest size={30} />
+                      </div>
+                      <span className="font-display font-bold text-white text-center" style={{ fontSize: 12 }}>Cruzeiro</span>
+                    </div>
+                    <span className="font-display font-black" style={{ fontSize: 26, color: 'rgba(255,255,255,0.85)' }}>VS</span>
+                    <div className="flex flex-col items-center gap-2" style={{ width: 84 }}>
+                      <div className="w-12 h-12 rounded-2xl flex items-center justify-center" style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)' }}>
+                        <span className="font-black text-white/70 text-sm">{nextOpp.slice(0, 3).toUpperCase()}</span>
+                      </div>
+                      <span className="font-display font-bold text-center" style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)' }}>{nextOpp}</span>
+                    </div>
+                  </div>
+                  <div className="flex flex-col items-center gap-1.5 mt-5">
+                    <div className="flex items-center gap-1.5">
+                      <Calendar size={12} style={{ color: '#5A9FEC' }} />
+                      <span className="text-xs font-semibold text-white">{nextMatch.date}{fmtTime(nextMatch.ts) ? ` · ${fmtTime(nextMatch.ts)}` : ''}</span>
+                    </div>
+                    {nextMatch.venue && (
+                      <div className="flex items-center gap-1.5">
+                        <MapPin size={11} style={{ color: 'rgba(255,255,255,0.3)' }} />
+                        <span className="text-[11px]" style={{ color: 'rgba(255,255,255,0.3)' }}>{nextMatch.venue}</span>
+                      </div>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <p className="text-sm text-center py-8" style={{ color: 'rgba(255,255,255,0.4)' }}>Sem jogos futuros agendados.</p>
+              )}
             </div>
           </div>
         </div>
@@ -1342,38 +1383,22 @@ function HomePage({ setPage, setSelectedPlayer, setSelectedMatch }: {
             </div>
           </section>
 
-          {/* Próxima + standings */}
-          <section className="space-y-4">
-            {/* Next match */}
-            <div>
-              <h2 className="font-display font-bold text-white mb-4" style={{ fontSize: 16 }}>Próxima Partida</h2>
-              <div className="rounded-2xl overflow-hidden"
-                style={{ background: 'linear-gradient(135deg, #0A1830, #0F2248)', border: '1px solid rgba(26,95,204,0.2)' }}>
-                <div className="px-5 py-5">
-                  <div className="flex items-center gap-3 mb-4">
-                    <div className="w-10 h-10 rounded-xl flex items-center justify-center"
-                      style={{ background: 'linear-gradient(135deg, #003087, #1A5FCC)' }}>
-                      <CruzeiroCrest size={22} />
-                    </div>
-                    <div className="font-display font-black text-white" style={{ fontSize: 15 }}>Cruzeiro</div>
-                    <div className="flex flex-col items-center flex-1">
-                      <span className="font-display font-black" style={{ fontSize: 20, color: '#4A8EE8' }}>VS</span>
-                      <span className="text-[10px] mt-1" style={{ color: '#3A5070' }}>{nextMatch?.date ?? ''}</span>
-                    </div>
-                    <div className="font-display font-black text-right" style={{ fontSize: 15, color: '#8098B0', maxWidth: 90 }}>{nextOpp}</div>
-                    <div className="w-10 h-10 rounded-xl flex items-center justify-center"
-                      style={{ background: 'rgba(255,255,255,0.06)' }}>
-                      <span className="font-bold text-white/60 text-xs">{nextOpp.slice(0, 3).toUpperCase()}</span>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-1.5 pt-3" style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}>
-                    <MapPin size={11} style={{ color: '#3A5070' }} />
-                    <span className="text-[11px]" style={{ color: '#3A5070' }}>{nextMatch ? `${nextMatch.venue} · ${nextMatch.comp}` : 'Sem jogos futuros'}</span>
-                  </div>
-                </div>
-              </div>
+          {/* Upcoming matches */}
+          <section>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-display font-bold text-white" style={{ fontSize: 16 }}>Próximas Partidas</h2>
+              <button onClick={() => setPage('matches')} className="text-xs font-semibold" style={{ color: '#4A8EE8' }}>Ver todas</button>
             </div>
-
+            <div className="space-y-3">
+              {MATCHES.filter(m => m.status === 'upcoming').slice(0, 3).map(m => (
+                <MatchCard key={m.id} match={m} onClick={() => { setSelectedMatch(m); setPage('match-detail') }} />
+              ))}
+              {MATCHES.filter(m => m.status === 'upcoming').length === 0 && (
+                <div className="rounded-2xl px-5 py-8 text-center" style={{ background: '#0A1528', border: '1px solid rgba(255,255,255,0.06)' }}>
+                  <span className="text-sm" style={{ color: '#5070A0' }}>Sem jogos futuros agendados</span>
+                </div>
+              )}
+            </div>
           </section>
         </div>
 
@@ -2149,9 +2174,12 @@ function MatchDetailPage({ match, onBack }: { match: Match; onBack: () => void }
 // ─── Rating Page ──────────────────────────────────────────────────────────────
 
 function RatingPage() {
-  const { players: PLAYERS, matches: MATCHES, reload } = useData()
+  const { players: allPlayers, matches: MATCHES, reload, fixturePlayers } = useData()
   const { user } = useAuth()
   const votingMatch = MATCHES.find(m => m.liberado) ?? null
+  const selectedIds = new Set(fixturePlayers.filter(fp => fp.fixture_id === votingMatch?.dbId).map(fp => fp.player_id))
+  // Only the players selected for this match are votable; otherwise the whole squad.
+  const PLAYERS = selectedIds.size > 0 ? allPlayers.filter(p => p.dbId && selectedIds.has(p.dbId)) : allPlayers
   const [currentIdx, setCurrentIdx] = useState(0)
   const [ratings, setRatings] = useState<Record<number, number>>({})
   const [hoveredRating, setHoveredRating] = useState<number | null>(null)
@@ -2407,32 +2435,16 @@ function RatingPage() {
 
 // ─── Admin Page ───────────────────────────────────────────────────────────────
 
-function AdminPage() {
-  const { players: PLAYERS, matches: MATCHES, reload } = useData()
-  const [savingId, setSavingId] = useState<string | null>(null)
-  const [compFilter, setCompFilter] = useState<string>('all')
+const ADMIN_INPUT = 'w-full px-3 py-2.5 rounded-xl text-sm text-white outline-none'
+const ADMIN_INPUT_STYLE = { background: '#091423', border: '1px solid rgba(255,255,255,0.08)', fontFamily: 'Inter, sans-serif' } as const
 
+function AdminOverviewTab() {
+  const { players: PLAYERS, matches: MATCHES } = useData()
   const totalVotes = PLAYERS.reduce((s, p) => s + p.votes, 0)
   const ratedPlayers = PLAYERS.filter(p => p.votes > 0).length
   const releasedCount = MATCHES.filter(m => m.liberado).length
   const topVoted = [...PLAYERS].sort((a, b) => b.votes - a.votes).slice(0, 5)
   const maxVotes = topVoted[0]?.votes || 1
-
-  const competitions = Array.from(new Set(MATCHES.map(m => m.comp)))
-  const listed = MATCHES.filter(m => compFilter === 'all' || m.comp === compFilter)
-
-  const toggleLiberado = async (m: Match) => {
-    if (!m.dbId) return
-    setSavingId(m.dbId)
-    const { error } = await supabase.from('fixtures').update({ liberado: !m.liberado }).eq('id', m.dbId)
-    setSavingId(null)
-    if (error) {
-      console.error('Falha ao atualizar liberação', error)
-      alert('Não foi possível atualizar. Verifique se você é admin.')
-    } else {
-      reload()
-    }
-  }
 
   const stats = [
     { icon: Vote, label: 'Total de votos', value: totalVotes.toLocaleString('pt-BR'), color: '#4A8EE8' },
@@ -2442,17 +2454,8 @@ function AdminPage() {
   ]
 
   return (
-    <div className="px-6 pb-12">
-      <div className="pt-8 pb-6">
-        <div className="flex items-center gap-2 mb-1">
-          <Shield size={15} style={{ color: '#C4972A' }} />
-          <span className="text-xs font-bold tracking-widest uppercase" style={{ color: '#C4972A' }}>Painel Administrativo</span>
-        </div>
-        <h2 className="font-display font-black text-white mb-1" style={{ fontSize: 30 }}>Gestão de Votação</h2>
-        <p className="text-sm" style={{ color: '#5070A0' }}>Libere os jogos que a torcida pode avaliar</p>
-      </div>
-
-      <div className="grid grid-cols-4 gap-3 mb-8">
+    <div className="space-y-6">
+      <div className="grid grid-cols-4 gap-3">
         {stats.map(({ icon: Icon, label, value, color }) => (
           <div key={label} className="rounded-2xl p-5" style={{ background: '#0A1528', border: '1px solid rgba(255,255,255,0.05)' }}>
             <div className="w-9 h-9 rounded-xl flex items-center justify-center mb-3" style={{ background: color + '12' }}>
@@ -2464,8 +2467,160 @@ function AdminPage() {
         ))}
       </div>
 
-      {/* Liberar jogos para votação */}
-      <div className="rounded-2xl overflow-hidden mb-6" style={{ background: '#0A1528', border: '1px solid rgba(255,255,255,0.05)' }}>
+      <div className="rounded-2xl p-5" style={{ background: '#0A1528', border: '1px solid rgba(255,255,255,0.05)' }}>
+        <h3 className="font-display font-bold text-white mb-4" style={{ fontSize: 14 }}>Mais Votados</h3>
+        {topVoted.some(p => p.votes > 0) ? (
+          <div className="space-y-3">
+            {topVoted.map((p, i) => (
+              <div key={p.id} className="flex items-center gap-3">
+                <span className="font-display font-black text-xs w-4 text-center" style={{ color: i === 0 ? '#C4972A' : '#2A3A50' }}>#{i + 1}</span>
+                <div className="flex-1 min-w-0">
+                  <div className="text-xs font-semibold text-white truncate">{p.short}</div>
+                  <div className="h-1 rounded-full mt-1 overflow-hidden" style={{ background: 'rgba(255,255,255,0.05)' }}>
+                    <div className="h-full rounded-full" style={{ width: `${(p.votes / maxVotes) * 100}%`, background: RARITY_CFG[p.rarity].accent }} />
+                  </div>
+                </div>
+                <span className="text-xs font-bold" style={{ color: '#3A5070' }}>{fmtVotes(p.votes)}</span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-xs" style={{ color: '#5070A0' }}>Nenhum voto ainda.</p>
+        )}
+      </div>
+    </div>
+  )
+}
+
+const EMPTY_MATCH_FORM = { id: '', home: 'Cruzeiro', away: '', comp: 'Campeonato Brasileiro', date: '', stadium: '', homeScore: '', awayScore: '', isNew: true }
+
+function AdminMatchesTab() {
+  const { matches: MATCHES, fixtureRows, reload } = useData()
+  const [savingId, setSavingId] = useState<string | null>(null)
+  const [compFilter, setCompFilter] = useState<string>('all')
+  const [form, setForm] = useState(EMPTY_MATCH_FORM)
+  const [saving, setSaving] = useState(false)
+
+  const competitions = Array.from(new Set(MATCHES.map(m => m.comp)))
+  const listed = MATCHES.filter(m => compFilter === 'all' || m.comp === compFilter)
+
+  const toLocalInput = (ts?: number) => {
+    if (!ts) return ''
+    const d = new Date(ts * 1000)
+    const p = (n: number) => String(n).padStart(2, '0')
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`
+  }
+
+  const startEdit = (m: Match) => {
+    const r = fixtureRows.find(x => x.id === m.dbId)
+    if (!r) return
+    setForm({
+      id: r.id,
+      home: r.home_team,
+      away: r.away_team,
+      comp: r.competition,
+      date: toLocalInput(r.ts) || (r.fixture_date.includes('T') ? r.fixture_date : r.fixture_date + 'T00:00'),
+      stadium: r.stadium ?? '',
+      homeScore: r.home_score == null ? '' : String(r.home_score),
+      awayScore: r.away_score == null ? '' : String(r.away_score),
+      isNew: false,
+    })
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  const toggleLiberado = async (m: Match) => {
+    if (!m.dbId) return
+    setSavingId(m.dbId)
+    const { error } = await supabase.from('fixtures').update({ liberado: !m.liberado }).eq('id', m.dbId)
+    setSavingId(null)
+    if (error) { console.error(error); alert('Não foi possível atualizar. Verifique se você é admin.') }
+    else reload()
+  }
+
+  const save = async () => {
+    if (!form.home.trim() || !form.away.trim() || !form.date) { alert('Preencha mandante, visitante e data.'); return }
+    setSaving(true)
+    const ts = Math.floor(new Date(form.date).getTime() / 1000)
+    const hasScores = form.homeScore !== '' && form.awayScore !== ''
+    const payload = {
+      home_team: form.home.trim(),
+      away_team: form.away.trim(),
+      home_score: hasScores ? Number(form.homeScore) : null,
+      away_score: hasScores ? Number(form.awayScore) : null,
+      fixture_date: form.date,
+      ts,
+      competition: form.comp.trim() || 'Amistoso',
+      stadium: form.stadium.trim() || null,
+      status: hasScores ? 'finished' : 'notstarted',
+    }
+    let error: { message: string } | null = null
+    if (form.isNew) {
+      const res = await supabase.from('fixtures').insert({ id: 'adm_' + Date.now(), ...payload, liberado: false, manual: true })
+      error = res.error
+    } else {
+      const res = await supabase.from('fixtures').update(payload).eq('id', form.id)
+      error = res.error
+    }
+    setSaving(false)
+    if (error) { console.error(error); alert('Não foi possível salvar. Verifique se você é admin.') }
+    else { setForm({ ...EMPTY_MATCH_FORM, comp: form.comp }); reload() }
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Adicionar / editar jogo */}
+      <div className="rounded-2xl p-5" style={{ background: '#0A1528', border: '1px solid rgba(255,255,255,0.05)' }}>
+        <h3 className="font-display font-bold text-white mb-4" style={{ fontSize: 14 }}>{form.isNew ? 'Adicionar jogo' : `Editar: ${form.home} × ${form.away}`}</h3>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="text-[11px] block mb-1" style={{ color: '#5070A0' }}>Mandante</label>
+            <input className={ADMIN_INPUT} style={ADMIN_INPUT_STYLE} value={form.home} onChange={e => setForm(f => ({ ...f, home: e.target.value }))} />
+          </div>
+          <div>
+            <label className="text-[11px] block mb-1" style={{ color: '#5070A0' }}>Visitante</label>
+            <input className={ADMIN_INPUT} style={ADMIN_INPUT_STYLE} value={form.away} onChange={e => setForm(f => ({ ...f, away: e.target.value }))} />
+          </div>
+          <div>
+            <label className="text-[11px] block mb-1" style={{ color: '#5070A0' }}>Competição</label>
+            <input className={ADMIN_INPUT} style={ADMIN_INPUT_STYLE} value={form.comp} onChange={e => setForm(f => ({ ...f, comp: e.target.value }))} />
+          </div>
+          <div>
+            <label className="text-[11px] block mb-1" style={{ color: '#5070A0' }}>Data e hora</label>
+            <input type="datetime-local" className={ADMIN_INPUT} style={ADMIN_INPUT_STYLE} value={form.date} onChange={e => setForm(f => ({ ...f, date: e.target.value }))} />
+          </div>
+          <div>
+            <label className="text-[11px] block mb-1" style={{ color: '#5070A0' }}>Estádio</label>
+            <input className={ADMIN_INPUT} style={ADMIN_INPUT_STYLE} value={form.stadium} onChange={e => setForm(f => ({ ...f, stadium: e.target.value }))} />
+          </div>
+          <div className="flex gap-3">
+            <div className="flex-1">
+              <label className="text-[11px] block mb-1" style={{ color: '#5070A0' }}>Placar mandante</label>
+              <input type="number" className={ADMIN_INPUT} style={ADMIN_INPUT_STYLE} value={form.homeScore} onChange={e => setForm(f => ({ ...f, homeScore: e.target.value }))} />
+            </div>
+            <div className="flex-1">
+              <label className="text-[11px] block mb-1" style={{ color: '#5070A0' }}>Placar visitante</label>
+              <input type="number" className={ADMIN_INPUT} style={ADMIN_INPUT_STYLE} value={form.awayScore} onChange={e => setForm(f => ({ ...f, awayScore: e.target.value }))} />
+            </div>
+          </div>
+        </div>
+        <p className="text-[11px] mt-2" style={{ color: '#3A5070' }}>Deixe o placar em branco para jogo futuro. Preencha para um jogo já encerrado.</p>
+        <div className="flex gap-2 mt-4">
+          <button onClick={save} disabled={saving}
+            className="px-4 py-2.5 rounded-xl font-display font-bold text-white text-sm"
+            style={{ background: 'linear-gradient(135deg, #003087, #1A5FCC)', opacity: saving ? 0.6 : 1 }}>
+            {saving ? 'Salvando...' : form.isNew ? 'Adicionar jogo' : 'Salvar alterações'}
+          </button>
+          {!form.isNew && (
+            <button onClick={() => setForm({ ...EMPTY_MATCH_FORM, comp: form.comp })}
+              className="px-4 py-2.5 rounded-xl text-sm font-semibold" style={{ background: 'rgba(255,255,255,0.05)', color: '#5070A0' }}>
+              Cancelar edição
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Liberar jogos */}
+      <div className="rounded-2xl overflow-hidden" style={{ background: '#0A1528', border: '1px solid rgba(255,255,255,0.05)' }}>
         <div className="px-5 py-4 flex items-center justify-between flex-wrap gap-3" style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
           <h3 className="font-display font-bold text-white" style={{ fontSize: 14 }}>Liberar jogos para votação</h3>
           <div className="flex gap-2 flex-wrap">
@@ -2488,6 +2643,11 @@ function AdminPage() {
                   {m.comp} · {m.date} · {m.status === 'finished' ? 'Encerrado' : 'Agendado'}
                 </div>
               </div>
+              <button onClick={() => startEdit(m)}
+                className="px-3 py-1.5 rounded-lg text-xs font-bold flex-shrink-0"
+                style={{ background: 'rgba(26,95,204,0.15)', color: '#4A8EE8' }}>
+                Editar
+              </button>
               <button onClick={() => toggleLiberado(m)} disabled={savingId === m.dbId}
                 className="px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 flex-shrink-0 transition-all duration-150"
                 style={{
@@ -2502,29 +2662,252 @@ function AdminPage() {
           ))}
         </div>
       </div>
+    </div>
+  )
+}
 
-      {/* Mais votados (real) */}
+function AdminPlayersTab() {
+  const { players: PLAYERS, matches: MATCHES, fixturePlayers, reload } = useData()
+  const [fid, setFid] = useState<string>('')
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [saving, setSaving] = useState(false)
+
+  // Initialize the selection from the current fixture_players of the chosen match.
+  useEffect(() => {
+    if (!fid) { setSelected(new Set()); return }
+    const current = fixturePlayers.filter(fp => fp.fixture_id === fid).map(fp => fp.player_id)
+    setSelected(new Set(current))
+  }, [fid, fixturePlayers])
+
+  const toggle = (pid: string) => {
+    setSelected(prev => {
+      const next = new Set(prev)
+      if (next.has(pid)) next.delete(pid)
+      else next.add(pid)
+      return next
+    })
+  }
+
+  const save = async () => {
+    if (!fid) return
+    setSaving(true)
+    await supabase.from('fixture_players').delete().eq('fixture_id', fid)
+    if (selected.size > 0) {
+      const rows = [...selected].map(pid => ({ fixture_id: fid, player_id: pid }))
+      const { error } = await supabase.from('fixture_players').insert(rows)
+      if (error) { console.error(error); alert('Não foi possível salvar. Verifique se você é admin.'); setSaving(false); return }
+    }
+    setSaving(false)
+    reload()
+    alert('Seleção salva!')
+  }
+
+  return (
+    <div className="space-y-5">
       <div className="rounded-2xl p-5" style={{ background: '#0A1528', border: '1px solid rgba(255,255,255,0.05)' }}>
-        <h3 className="font-display font-bold text-white mb-4" style={{ fontSize: 14 }}>Mais Votados</h3>
-        {topVoted.some(p => p.votes > 0) ? (
-          <div className="space-y-3">
-            {topVoted.map((p, i) => (
-              <div key={p.id} className="flex items-center gap-3">
-                <span className="font-display font-black text-xs w-4 text-center" style={{ color: i === 0 ? '#C4972A' : '#2A3A50' }}>#{i + 1}</span>
-                <div className="flex-1 min-w-0">
-                  <div className="text-xs font-semibold text-white truncate">{p.short}</div>
-                  <div className="h-1 rounded-full mt-1 overflow-hidden" style={{ background: 'rgba(255,255,255,0.05)' }}>
-                    <div className="h-full rounded-full" style={{ width: `${(p.votes / maxVotes) * 100}%`, background: RARITY_CFG[p.rarity].accent }} />
-                  </div>
-                </div>
-                <span className="text-xs font-bold" style={{ color: '#3A5070' }}>{fmtVotes(p.votes)}</span>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <p className="text-xs" style={{ color: '#5070A0' }}>Nenhum voto ainda.</p>
-        )}
+        <h3 className="font-display font-bold text-white mb-2" style={{ fontSize: 14 }}>Jogadores da partida</h3>
+        <p className="text-[12px] mb-4" style={{ color: '#5070A0' }}>Escolha um jogo e marque quais jogadores entram na votação. Sem seleção, a votação usa o elenco inteiro.</p>
+        <select className={ADMIN_INPUT} style={ADMIN_INPUT_STYLE} value={fid} onChange={e => setFid(e.target.value)}>
+          <option value="">Selecione um jogo...</option>
+          {MATCHES.map(m => (
+            <option key={m.id} value={m.dbId ?? ''}>{m.home} × {m.away} — {m.comp} ({m.date})</option>
+          ))}
+        </select>
       </div>
+
+      {fid && (
+        <div className="rounded-2xl p-5" style={{ background: '#0A1528', border: '1px solid rgba(255,255,255,0.05)' }}>
+          <div className="flex items-center justify-between mb-4">
+            <span className="text-xs font-semibold" style={{ color: '#7090B0' }}>{selected.size} selecionado(s)</span>
+            <div className="flex gap-2">
+              <button onClick={() => setSelected(new Set(PLAYERS.map(p => p.dbId!).filter(Boolean)))}
+                className="text-[11px] font-semibold px-2 py-1 rounded-lg" style={{ background: 'rgba(255,255,255,0.05)', color: '#5070A0' }}>Todos</button>
+              <button onClick={() => setSelected(new Set())}
+                className="text-[11px] font-semibold px-2 py-1 rounded-lg" style={{ background: 'rgba(255,255,255,0.05)', color: '#5070A0' }}>Nenhum</button>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-2" style={{ maxHeight: 380, overflowY: 'auto' }}>
+            {PLAYERS.map(p => {
+              const on = p.dbId ? selected.has(p.dbId) : false
+              return (
+                <button key={p.id} onClick={() => p.dbId && toggle(p.dbId)}
+                  className="flex items-center gap-3 px-3 py-2 rounded-xl text-left transition-all duration-150"
+                  style={{ background: on ? 'rgba(26,95,204,0.15)' : 'rgba(255,255,255,0.03)', border: `1px solid ${on ? 'rgba(26,95,204,0.4)' : 'rgba(255,255,255,0.05)'}` }}>
+                  <div className="w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0"
+                    style={{ background: on ? '#1A5FCC' : 'rgba(255,255,255,0.06)' }}>
+                    {on && <CheckCircle size={13} className="text-white" />}
+                  </div>
+                  <span className="text-xs font-semibold text-white truncate">{p.name}</span>
+                  <span className="text-[10px] ml-auto" style={{ color: '#3A5070' }}>{p.pos}</span>
+                </button>
+              )
+            })}
+          </div>
+          <button onClick={save} disabled={saving}
+            className="mt-4 px-4 py-2.5 rounded-xl font-display font-bold text-white text-sm"
+            style={{ background: 'linear-gradient(135deg, #003087, #1A5FCC)', opacity: saving ? 0.6 : 1 }}>
+            {saving ? 'Salvando...' : 'Salvar seleção'}
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+const POSITION_PT: Record<string, string> = {
+  Goalkeeper: 'Goleiro', Defender: 'Defensor', Midfielder: 'Meio-campo', Attacker: 'Atacante',
+}
+
+function AdminSquadTab() {
+  const { squadRows, reload } = useData()
+  const [form, setForm] = useState<null | { id: string; name: string; position: string; number: string; nationality: string; photo: string; isNew: boolean }>(null)
+  const [saving, setSaving] = useState(false)
+
+  const startNew = () => setForm({ id: '', name: '', position: 'Attacker', number: '', nationality: 'Brazil', photo: '', isNew: true })
+  const startEdit = (r: DbSquadRow) => setForm({ id: r.id, name: r.name, position: r.position, number: r.number ?? '', nationality: r.nationality ?? '', photo: r.photo ?? '', isNew: false })
+
+  const save = async () => {
+    if (!form || !form.name.trim()) { alert('Informe o nome do jogador.'); return }
+    setSaving(true)
+    const payload = {
+      name: form.name.trim(),
+      position: form.position,
+      number: form.number.trim() || null,
+      nationality: form.nationality.trim() || null,
+      photo: form.photo.trim() || null,
+      manual: true,
+    }
+    let error: { message: string } | null = null
+    if (form.isNew) {
+      const res = await supabase.from('squad').insert({ id: 'sq_' + Date.now(), ...payload })
+      error = res.error
+    } else {
+      const res = await supabase.from('squad').update(payload).eq('id', form.id)
+      error = res.error
+    }
+    setSaving(false)
+    if (error) { console.error('Falha ao salvar jogador', error); alert('Não foi possível salvar. Verifique se você é admin.') }
+    else { setForm(null); reload() }
+  }
+
+  const remove = async (r: DbSquadRow) => {
+    if (!confirm(`Remover ${r.name} do elenco?`)) return
+    const { error } = await supabase.from('squad').delete().eq('id', r.id)
+    if (error) { console.error(error); alert('Não foi possível remover.') }
+    else reload()
+  }
+
+  const ordered = [...squadRows].sort((a, b) => a.name.localeCompare(b.name))
+
+  return (
+    <div className="space-y-5">
+      {form ? (
+        <div className="rounded-2xl p-5" style={{ background: '#0A1528', border: '1px solid rgba(255,255,255,0.05)' }}>
+          <h3 className="font-display font-bold text-white mb-4" style={{ fontSize: 14 }}>{form.isNew ? 'Adicionar jogador' : `Editar ${form.name}`}</h3>
+          <div className="flex gap-4">
+            <div className="w-20 h-20 rounded-xl overflow-hidden flex-shrink-0 flex items-center justify-center" style={{ background: '#091423', border: '1px solid rgba(255,255,255,0.08)' }}>
+              {form.photo ? <img src={form.photo} alt="" className="w-full h-full object-cover object-top" /> : <span className="text-xs" style={{ color: '#3A5070' }}>sem foto</span>}
+            </div>
+            <div className="flex-1 grid grid-cols-2 gap-3">
+              <div className="col-span-2">
+                <label className="text-[11px] block mb-1" style={{ color: '#5070A0' }}>Nome</label>
+                <input className={ADMIN_INPUT} style={ADMIN_INPUT_STYLE} value={form.name} onChange={e => setForm(f => f && ({ ...f, name: e.target.value }))} />
+              </div>
+              <div>
+                <label className="text-[11px] block mb-1" style={{ color: '#5070A0' }}>Posição</label>
+                <select className={ADMIN_INPUT} style={ADMIN_INPUT_STYLE} value={form.position} onChange={e => setForm(f => f && ({ ...f, position: e.target.value }))}>
+                  {['Goalkeeper', 'Defender', 'Midfielder', 'Attacker'].map(p => <option key={p} value={p}>{POSITION_PT[p]}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="text-[11px] block mb-1" style={{ color: '#5070A0' }}>Número</label>
+                <input className={ADMIN_INPUT} style={ADMIN_INPUT_STYLE} value={form.number} onChange={e => setForm(f => f && ({ ...f, number: e.target.value }))} />
+              </div>
+              <div>
+                <label className="text-[11px] block mb-1" style={{ color: '#5070A0' }}>Nacionalidade</label>
+                <input className={ADMIN_INPUT} style={ADMIN_INPUT_STYLE} value={form.nationality} onChange={e => setForm(f => f && ({ ...f, nationality: e.target.value }))} placeholder="Brazil" />
+              </div>
+              <div>
+                <label className="text-[11px] block mb-1" style={{ color: '#5070A0' }}>Foto (URL)</label>
+                <input className={ADMIN_INPUT} style={ADMIN_INPUT_STYLE} value={form.photo} onChange={e => setForm(f => f && ({ ...f, photo: e.target.value }))} placeholder="https://..." />
+              </div>
+            </div>
+          </div>
+          <div className="flex gap-2 mt-4">
+            <button onClick={save} disabled={saving}
+              className="px-4 py-2.5 rounded-xl font-display font-bold text-white text-sm"
+              style={{ background: 'linear-gradient(135deg, #003087, #1A5FCC)', opacity: saving ? 0.6 : 1 }}>
+              {saving ? 'Salvando...' : 'Salvar'}
+            </button>
+            <button onClick={() => setForm(null)} className="px-4 py-2.5 rounded-xl text-sm font-semibold" style={{ background: 'rgba(255,255,255,0.05)', color: '#5070A0' }}>Cancelar</button>
+          </div>
+        </div>
+      ) : (
+        <button onClick={startNew}
+          className="px-4 py-2.5 rounded-xl font-display font-bold text-white text-sm"
+          style={{ background: 'linear-gradient(135deg, #003087, #1A5FCC)' }}>
+          + Adicionar jogador
+        </button>
+      )}
+
+      <div className="rounded-2xl overflow-hidden" style={{ background: '#0A1528', border: '1px solid rgba(255,255,255,0.05)' }}>
+        <div className="px-5 py-4" style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+          <h3 className="font-display font-bold text-white" style={{ fontSize: 14 }}>Elenco ({ordered.length})</h3>
+        </div>
+        <div style={{ maxHeight: 520, overflowY: 'auto' }}>
+          {ordered.map((r, i) => (
+            <div key={r.id} className="flex items-center gap-3 px-5 py-3"
+              style={{ borderBottom: i < ordered.length - 1 ? '1px solid rgba(255,255,255,0.04)' : 'none' }}>
+              <div className="w-9 h-9 rounded-lg overflow-hidden flex-shrink-0 flex items-center justify-center" style={{ background: '#091423' }}>
+                {r.photo ? <img src={r.photo} alt="" className="w-full h-full object-cover object-top" /> : <span className="text-[10px] font-bold text-white">{r.number ?? '?'}</span>}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-semibold text-white truncate">{r.name}</div>
+                <div className="text-[11px]" style={{ color: '#5070A0' }}>{POSITION_PT[r.position] ?? r.position} · #{r.number ?? '—'} · {r.nationality ?? '—'}</div>
+              </div>
+              <button onClick={() => startEdit(r)} className="px-2.5 py-1 rounded-lg text-[11px] font-semibold" style={{ background: 'rgba(26,95,204,0.15)', color: '#4A8EE8' }}>Editar</button>
+              <button onClick={() => remove(r)} className="px-2.5 py-1 rounded-lg text-[11px] font-semibold" style={{ background: 'rgba(239,68,68,0.12)', color: '#FF6060' }}>Remover</button>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function AdminPage() {
+  const [tab, setTab] = useState<'matches' | 'players' | 'squad' | 'overview'>('matches')
+  const tabs: { id: typeof tab; label: string }[] = [
+    { id: 'matches', label: 'Partidas' },
+    { id: 'players', label: 'Jogadores da partida' },
+    { id: 'squad', label: 'Elenco' },
+    { id: 'overview', label: 'Visão geral' },
+  ]
+
+  return (
+    <div className="px-6 pb-12">
+      <div className="pt-8 pb-5">
+        <div className="flex items-center gap-2 mb-1">
+          <Shield size={15} style={{ color: '#C4972A' }} />
+          <span className="text-xs font-bold tracking-widest uppercase" style={{ color: '#C4972A' }}>Painel Administrativo</span>
+        </div>
+        <h2 className="font-display font-black text-white" style={{ fontSize: 30 }}>Administração</h2>
+      </div>
+
+      <div className="flex gap-1 p-1 rounded-2xl mb-7" style={{ background: '#0A1528', maxWidth: 680 }}>
+        {tabs.map(t => (
+          <button key={t.id} onClick={() => setTab(t.id)}
+            className="flex-1 py-2.5 px-3 rounded-xl text-sm font-semibold transition-all duration-200 whitespace-nowrap"
+            style={{ background: tab === t.id ? '#003087' : 'transparent', color: tab === t.id ? 'white' : '#5070A0' }}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'matches' && <AdminMatchesTab />}
+      {tab === 'players' && <AdminPlayersTab />}
+      {tab === 'squad' && <AdminSquadTab />}
+      {tab === 'overview' && <AdminOverviewTab />}
     </div>
   )
 }
