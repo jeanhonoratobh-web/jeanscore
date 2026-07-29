@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, createContext, useContext, type ReactNode } from 'react'
 import fotoCapa from './imports/Foto_Capa.jpg'
 import fotoFundoInicio from './imports/Foto_Fundo_Inicio.jpg'
+import cruzeiroLogo from './imports/cruzeiro_logo.png'
 import { supabase } from './supabase'
 import {
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer,
@@ -9,7 +10,7 @@ import {
 import {
   Home, Trophy, Users, Calendar, Star, Settings, ChevronRight,
   TrendingUp, TrendingDown, Minus, MapPin, Clock, Award,
-  Search, Bell, ArrowLeft, Shield, Target,
+  Search, ArrowLeft, Shield, Target,
   Activity, Vote, Crown, Flame, CheckCircle,
   BarChart2, Zap, Eye, Heart, LogOut,
 } from 'lucide-react'
@@ -24,13 +25,13 @@ interface Player {
   id: number; name: string; short: string; pos: Pos; rating: number;
   votes: number; flag: string; rarity: Rarity; num: number; goals: number;
   assists: number; matches: number; trend: 'up' | 'down' | 'stable';
-  nat: string; age: number; cleanSheets?: number; saves?: number; photo?: string; dbId?: string;
+  nat: string; age: number; cleanSheets?: number; saves?: number; photo?: string; dbId?: string; attrOverall?: number;
 }
 
 interface Match {
   id: number; home: string; away: string; homeScore: number; awayScore: number;
   date: string; comp: string; status: 'live' | 'finished' | 'upcoming';
-  minute?: number; venue: string; round: string; dbId?: string;
+  minute?: number; venue: string; round: string; dbId?: string; liberado?: boolean; ts?: number;
 }
 
 // ─── Data ─────────────────────────────────────────────────────────────────────
@@ -102,6 +103,17 @@ const fmtRating = (r: number) => r > 0 ? r.toFixed(1) : '–'
 const fmtVotes = (v: number) => v >= 1000 ? `${(v / 1000).toFixed(1)}K` : v.toString()
 const isCruzeiro = (team: string) => team === 'Cruzeiro'
 
+/** Attribute set voted by the community, per position group. */
+const ATTRIBUTE_SETS: Record<'GK' | 'ST' | 'OUTFIELD', string[]> = {
+  GK: ['Reflexos', 'Posicionamento', 'Saída', 'Comando', 'Distribuição'],
+  ST: ['Finalização', 'Velocidade', 'Cabeceio', 'Drible', 'Posicionamento'],
+  OUTFIELD: ['Passe', 'Visão', 'Drible', 'Posicionamento', 'Finalização'],
+}
+
+/** Returns the attribute labels for a player's position. */
+const attributesFor = (pos: Pos): string[] =>
+  pos === 'GK' ? ATTRIBUTE_SETS.GK : pos === 'ST' ? ATTRIBUTE_SETS.ST : ATTRIBUTE_SETS.OUTFIELD
+
 /** Card rarity derived from a player's average rating (0 = unrated → bronze). */
 const rarityFromRating = (r: number): Rarity =>
   r >= 8.5 ? 'legendary' : r >= 7.5 ? 'gold' : r >= 6 ? 'silver' : 'bronze'
@@ -147,6 +159,7 @@ interface DbFixtureRow {
   competition: string
   stadium: string | null
   status: string
+  liberado: boolean
 }
 
 const POS_BY_CATEGORY: Record<DbSquadRow['position'], Pos> = {
@@ -214,6 +227,8 @@ function mapFixtureRowToMatch(row: DbFixtureRow, index: number): Match {
     venue: row.stadium ?? '',
     round: '',
     dbId: row.id,
+    liberado: row.liberado ?? false,
+    ts: row.ts,
   }
 }
 
@@ -251,17 +266,27 @@ interface DbRatingRow {
   created_at: string
 }
 
+interface DbAttributeRating {
+  id: string
+  user_id: string
+  player_id: string
+  attribute: string
+  score: number
+}
+
 interface JeanData {
   players: Player[]
   matches: Match[]
   standings: DbStandingRow[]
   competitions: DbCompetitionStatus[]
   recentRatings: DbRatingRow[]
+  ratings: DbRatingRow[]
+  attributeRatings: DbAttributeRating[]
   loading: boolean
   reload: () => void
 }
 
-const DataContext = createContext<JeanData>({ players: MOCK_PLAYERS, matches: MOCK_MATCHES, standings: [], competitions: [], recentRatings: [], loading: true, reload: () => {} })
+const DataContext = createContext<JeanData>({ players: MOCK_PLAYERS, matches: MOCK_MATCHES, standings: [], competitions: [], recentRatings: [], ratings: [], attributeRatings: [], loading: true, reload: () => {} })
 
 function useData(): JeanData {
   return useContext(DataContext)
@@ -281,6 +306,8 @@ function DataProvider({ children }: { children: ReactNode }) {
   const [standings, setStandings] = useState<DbStandingRow[]>([])
   const [competitions, setCompetitions] = useState<DbCompetitionStatus[]>([])
   const [recentRatings, setRecentRatings] = useState<DbRatingRow[]>([])
+  const [ratings, setRatings] = useState<DbRatingRow[]>([])
+  const [attributeRatings, setAttributeRatings] = useState<DbAttributeRating[]>([])
   const [loading, setLoading] = useState(true)
   const [tick, setTick] = useState(0)
   const reload = () => setTick((t) => t + 1)
@@ -301,10 +328,23 @@ function DataProvider({ children }: { children: ReactNode }) {
         agg.set(r.player_id, a)
       }
 
+      // Attribute votes → per-player overall (0–99). Optional table.
+      let attrRows: DbAttributeRating[] = []
+      try {
+        attrRows = await supaGet<DbAttributeRating[]>('attribute_ratings?select=id,user_id,player_id,attribute,score')
+      } catch { /* attribute_ratings table may not exist yet */ }
+      const attrAgg = new Map<string, { sum: number; n: number }>()
+      for (const a of attrRows) {
+        const x = attrAgg.get(a.player_id) ?? { sum: 0, n: 0 }
+        x.sum += Number(a.score)
+        x.n += 1
+        attrAgg.set(a.player_id, x)
+      }
+
       try {
         const [squad, fixtures] = await Promise.all([
           supaGet<DbSquadRow[]>('squad?select=id,name,position,number,photo,nationality&order=name.asc'),
-          supaGet<DbFixtureRow[]>('fixtures?select=id,home_team,away_team,home_score,away_score,fixture_date,ts,competition,stadium,status'),
+          supaGet<DbFixtureRow[]>('fixtures?select=id,home_team,away_team,home_score,away_score,fixture_date,ts,competition,stadium,status,liberado'),
         ])
         if (!active) return
         if (squad.length > 0) {
@@ -317,6 +357,8 @@ function DataProvider({ children }: { children: ReactNode }) {
               p.votes = a.n
               p.rarity = rarityFromRating(avg)
             }
+            const av = attrAgg.get(row.id)
+            if (av && av.n > 0) p.attrOverall = Math.round(av.sum / av.n)
             return p
           }))
         }
@@ -326,7 +368,11 @@ function DataProvider({ children }: { children: ReactNode }) {
           const upcoming = fixtures.filter((f) => f.status !== 'finished').sort((a, b) => a.ts - b.ts)
           setMatches([...finished, ...upcoming].map(mapFixtureRowToMatch))
         }
-        if (active) setRecentRatings(ratingRows.slice(0, 8))
+        if (active) {
+          setRecentRatings(ratingRows.slice(0, 8))
+          setRatings(ratingRows)
+          setAttributeRatings(attrRows)
+        }
       } catch (err) {
         console.error('Failed to load JeanScore data from Supabase', err)
       }
@@ -349,7 +395,7 @@ function DataProvider({ children }: { children: ReactNode }) {
   }, [tick])
 
   return (
-    <DataContext.Provider value={{ players, matches, standings, competitions, recentRatings, loading, reload }}>
+    <DataContext.Provider value={{ players, matches, standings, competitions, recentRatings, ratings, attributeRatings, loading, reload }}>
       {children}
     </DataContext.Provider>
   )
@@ -367,11 +413,12 @@ interface AuthState {
   user: AuthUser | null
   loading: boolean
   recovery: boolean
+  isAdmin: boolean
   signOut: () => void
   endRecovery: () => void
 }
 
-const AuthContext = createContext<AuthState>({ user: null, loading: true, recovery: false, signOut: () => {}, endRecovery: () => {} })
+const AuthContext = createContext<AuthState>({ user: null, loading: true, recovery: false, isAdmin: false, signOut: () => {}, endRecovery: () => {} })
 
 function useAuth(): AuthState {
   return useContext(AuthContext)
@@ -389,6 +436,26 @@ function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null)
   const [loading, setLoading] = useState(true)
   const [recovery, setRecovery] = useState(false)
+  const [isAdmin, setIsAdmin] = useState(false)
+
+  useEffect(() => {
+    let active = true
+    if (!user) {
+      setIsAdmin(false)
+      return
+    }
+    supabase
+      .from('admins')
+      .select('user_id')
+      .eq('user_id', user.id)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (active) setIsAdmin(Boolean(data))
+      })
+    return () => {
+      active = false
+    }
+  }, [user])
 
   useEffect(() => {
     let active = true
@@ -417,7 +484,7 @@ function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, recovery, signOut, endRecovery }}>
+    <AuthContext.Provider value={{ user, loading, recovery, isAdmin, signOut, endRecovery }}>
       {children}
     </AuthContext.Provider>
   )
@@ -574,28 +641,8 @@ function JeanScoreLogo({ width = 220, showStars = true }: { width?: number; show
 
 function CruzeiroCrest({ size = 32 }: { size?: number }) {
   return (
-    <svg width={size} height={size * 1.15} viewBox="0 0 40 46" fill="none">
-      <defs>
-        <linearGradient id="sg" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stopColor="#1A5FCC" />
-          <stop offset="100%" stopColor="#003087" />
-        </linearGradient>
-        <linearGradient id="gg" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stopColor="#E8C840" />
-          <stop offset="100%" stopColor="#C4972A" />
-        </linearGradient>
-      </defs>
-      <path d="M20 1L1 7V27C1 37 11 43.5 20 46C29 43.5 39 37 39 27V7L20 1Z" fill="url(#sg)" />
-      <path d="M20 4L4 9.5V27C4 35.5 12.5 41.5 20 43.5V4Z" fill="rgba(0,0,0,0.15)" />
-      <rect x="18" y="12" width="4" height="22" fill="white" rx="1" />
-      <rect x="9" y="20" width="22" height="4" fill="white" rx="1" />
-      <circle cx="9" cy="12" r="1.8" fill="url(#gg)" />
-      <circle cx="31" cy="12" r="1.8" fill="url(#gg)" />
-      <circle cx="9" cy="34" r="1.8" fill="url(#gg)" />
-      <circle cx="31" cy="34" r="1.8" fill="url(#gg)" />
-      <circle cx="20" cy="8" r="1.5" fill="url(#gg)" />
-      <path d="M20 1L1 7V27C1 37 11 43.5 20 46C29 43.5 39 37 39 27V7L20 1Z" fill="none" stroke="rgba(232,200,64,0.3)" strokeWidth="1" />
-    </svg>
+    <img src={cruzeiroLogo} alt="Cruzeiro" width={size} height={size}
+      style={{ objectFit: 'contain', display: 'block', userSelect: 'none' }} draggable={false} />
   )
 }
 
@@ -661,7 +708,7 @@ function PlayerCard({ player, onClick, rank, compact }: { player: Player; onClic
       {/* Top row */}
       <div className="flex items-start justify-between px-3 pt-3 pb-1">
         <div>
-          <div className="font-display font-extrabold leading-none" style={{ fontSize: compact ? 24 : 28, color: cfg.accent }}>{fmtRating(player.rating)}</div>
+          <div className="font-display font-extrabold leading-none" style={{ fontSize: compact ? 24 : 28, color: cfg.accent }}>{player.attrOverall ?? '–'}</div>
           <PosBadge pos={player.pos} />
         </div>
         <div className="flex flex-col items-end gap-1">
@@ -699,21 +746,15 @@ function PlayerCard({ player, onClick, rank, compact }: { player: Player; onClic
 
       {/* Stats row */}
       <div className="flex items-center justify-between px-3 py-2 mx-2 mb-2 rounded-lg" style={{ background: 'rgba(0,0,0,0.38)' }}>
-        {player.pos === 'GK' ? (
-          <>
-            <StatMini icon="🧤" value={player.cleanSheets ?? 0} label="CS" />
-            <div className="w-px h-5 bg-white opacity-10" />
-            <StatMini icon="🛡" value={player.saves ?? 0} label="DEF" />
-          </>
-        ) : (
-          <>
-            <StatMini icon="⚽" value={player.goals} label="GOL" />
-            <div className="w-px h-5 bg-white opacity-10" />
-            <StatMini icon="A" value={player.assists} label="ASS" />
-          </>
-        )}
-        <div className="w-px h-5 bg-white opacity-10" />
-        <StatMini icon="P" value={player.matches} label="JG" />
+        <div className="flex flex-col">
+          <span className="text-[8px] font-bold tracking-wider uppercase" style={{ color: '#5070A0' }}>Nota</span>
+          <span className="font-display font-black text-white" style={{ fontSize: 15, lineHeight: 1.1, color: cfg.accent }}>{fmtRating(player.rating)}</span>
+        </div>
+        <div className="w-px h-6 bg-white opacity-10" />
+        <div className="flex flex-col items-end">
+          <span className="text-[8px] font-bold tracking-wider uppercase" style={{ color: '#5070A0' }}>Votos</span>
+          <span className="font-display font-bold text-white" style={{ fontSize: 13, lineHeight: 1.1 }}>{fmtVotes(player.votes)}</span>
+        </div>
       </div>
 
       <div className="px-3 pb-3">
@@ -901,7 +942,7 @@ const NAV_ITEMS = [
 
 function Sidebar({ page, setPage }: { page: Page; setPage: (p: Page) => void }) {
   const [expanded, setExpanded] = useState(false)
-  const { signOut } = useAuth()
+  const { signOut, isAdmin } = useAuth()
   return (
     <aside
       onMouseEnter={() => setExpanded(true)}
@@ -941,15 +982,17 @@ function Sidebar({ page, setPage }: { page: Page; setPage: (p: Page) => void }) 
       </nav>
 
       <div className="py-4" style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}>
-        <button onClick={() => setPage('admin')}
-          className="flex items-center gap-3 mx-2 px-2.5 py-2.5 rounded-xl w-[calc(100%-16px)] transition-all duration-150"
-          style={{ background: page === 'admin' ? 'rgba(196,151,42,0.12)' : 'transparent' }}>
-          <Settings size={16} style={{ flexShrink: 0, color: page === 'admin' ? '#C4972A' : '#2A3A50' }} />
-          <span className="text-sm font-medium whitespace-nowrap overflow-hidden"
-            style={{ opacity: expanded ? 1 : 0, width: expanded ? 'auto' : 0, color: page === 'admin' ? '#C4972A' : '#3A5070', transition: 'all 0.2s ease' }}>
-            Admin
-          </span>
-        </button>
+        {isAdmin && (
+          <button onClick={() => setPage('admin')}
+            className="flex items-center gap-3 mx-2 px-2.5 py-2.5 rounded-xl w-[calc(100%-16px)] transition-all duration-150"
+            style={{ background: page === 'admin' ? 'rgba(196,151,42,0.12)' : 'transparent' }}>
+            <Settings size={16} style={{ flexShrink: 0, color: page === 'admin' ? '#C4972A' : '#2A3A50' }} />
+            <span className="text-sm font-medium whitespace-nowrap overflow-hidden"
+              style={{ opacity: expanded ? 1 : 0, width: expanded ? 'auto' : 0, color: page === 'admin' ? '#C4972A' : '#3A5070', transition: 'all 0.2s ease' }}>
+              Admin
+            </span>
+          </button>
+        )}
         <button onClick={signOut}
           className="flex items-center gap-3 mx-2 px-2.5 py-2.5 rounded-xl w-[calc(100%-16px)] transition-all duration-150"
           style={{ background: 'transparent' }}>
@@ -966,23 +1009,68 @@ function Sidebar({ page, setPage }: { page: Page; setPage: (p: Page) => void }) 
 
 // ─── Top Bar ──────────────────────────────────────────────────────────────────
 
-function TopBar({ title }: { title: string }) {
+function TopBar({ title, onSelectPlayer }: { title: string; onSelectPlayer: (p: Player) => void }) {
+  const { user } = useAuth()
+  const { players } = useData()
+  const [open, setOpen] = useState(false)
+  const [q, setQ] = useState('')
+  const initial = (user?.name?.trim()?.charAt(0) ?? 'T').toUpperCase()
+
+  const results = q.trim().length > 0
+    ? players.filter(p => p.name.toLowerCase().includes(q.trim().toLowerCase())).slice(0, 6)
+    : []
+
+  const pick = (p: Player) => {
+    onSelectPlayer(p)
+    setOpen(false)
+    setQ('')
+  }
+
   return (
     <header className="sticky top-0 z-40 flex items-center justify-between px-6 py-3.5"
       style={{ background: 'rgba(3,9,16,0.9)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
       <h1 className="font-display font-bold text-white" style={{ fontSize: 17 }}>{title}</h1>
       <div className="flex items-center gap-2.5">
-        <button className="w-8 h-8 flex items-center justify-center rounded-xl"
-          style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}>
-          <Search size={14} style={{ color: '#5070A0' }} />
-        </button>
-        <button className="w-8 h-8 flex items-center justify-center rounded-xl relative"
-          style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}>
-          <Bell size={14} style={{ color: '#5070A0' }} />
-          <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-red-500 border border-[#030910]" />
-        </button>
-        <div className="w-8 h-8 rounded-xl flex items-center justify-center font-display font-bold text-white text-xs"
-          style={{ background: 'linear-gradient(135deg, #003087, #1A5FCC)' }}>R</div>
+        <div className="relative">
+          {open ? (
+            <div className="flex items-center gap-2 px-3 rounded-xl"
+              style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)', height: 32 }}>
+              <Search size={14} style={{ color: '#5070A0' }} />
+              <input autoFocus value={q} onChange={e => setQ(e.target.value)} placeholder="Buscar jogador..."
+                onBlur={() => setTimeout(() => setOpen(false), 150)}
+                className="bg-transparent outline-none text-sm text-white"
+                style={{ width: 180, fontFamily: 'Inter, sans-serif' }} />
+            </div>
+          ) : (
+            <button onClick={() => setOpen(true)} className="w-8 h-8 flex items-center justify-center rounded-xl"
+              style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}>
+              <Search size={14} style={{ color: '#5070A0' }} />
+            </button>
+          )}
+          {open && results.length > 0 && (
+            <div className="absolute right-0 mt-2 rounded-xl overflow-hidden z-50"
+              style={{ width: 250, background: '#0A1528', border: '1px solid rgba(255,255,255,0.08)', boxShadow: '0 12px 32px rgba(0,0,0,0.5)' }}>
+              {results.map((p, i) => (
+                <button key={p.id} onMouseDown={() => pick(p)}
+                  className="w-full flex items-center gap-3 px-3 py-2.5 text-left transition-colors"
+                  style={{ borderBottom: i < results.length - 1 ? '1px solid rgba(255,255,255,0.04)' : 'none', background: 'transparent' }}>
+                  <div className="w-7 h-7 rounded-lg overflow-hidden flex-shrink-0" style={{ background: RARITY_CFG[p.rarity].photoGrad }}>
+                    {p.photo
+                      ? <img src={p.photo} alt={p.name} className="w-full h-full object-cover object-top" />
+                      : <div className="w-full h-full flex items-center justify-center text-white text-xs font-bold">{p.num}</div>}
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-xs font-semibold text-white truncate">{p.name}</div>
+                    <div className="text-[10px]" style={{ color: '#5070A0' }}>{p.pos} · #{p.num}</div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        <div title={user?.name ?? undefined}
+          className="w-8 h-8 rounded-xl flex items-center justify-center font-display font-bold text-white text-xs"
+          style={{ background: 'linear-gradient(135deg, #003087, #1A5FCC)' }}>{initial}</div>
       </div>
     </header>
   )
@@ -1022,6 +1110,7 @@ function HomePage({ setPage, setSelectedPlayer, setSelectedMatch }: {
 
   const nextMatch = MATCHES.find(m => m.status === 'upcoming') ?? null
   const nextOpp = nextMatch ? (isCruzeiro(nextMatch.home) ? nextMatch.away : nextMatch.home) : ''
+  const hasOpenVoting = MATCHES.some(m => m.liberado)
 
   const [activeForm, setActiveForm] = useState<'W' | 'D' | 'L' | null>(null)
 
@@ -1103,12 +1192,14 @@ function HomePage({ setPage, setSelectedPlayer, setSelectedMatch }: {
                   style={{ background: 'linear-gradient(135deg, #003087, #1A5FCC)', color: 'white', boxShadow: '0 4px 16px rgba(26,95,204,0.4)' }}>
                   Ver Partida
                 </button>
-                <button
-                  onClick={() => setPage('rate')}
-                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-bold transition-all duration-200"
-                  style={{ background: 'rgba(196,151,42,0.18)', color: '#E8C840', border: '1px solid rgba(196,151,42,0.3)' }}>
-                  <Star size={13} /> Avaliar
-                </button>
+                {hasOpenVoting && (
+                  <button
+                    onClick={() => setPage('rate')}
+                    className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-bold transition-all duration-200"
+                    style={{ background: 'rgba(196,151,42,0.18)', color: '#E8C840', border: '1px solid rgba(196,151,42,0.3)' }}>
+                    <Star size={13} /> Avaliar
+                  </button>
+                )}
               </div>
             </div>
 
@@ -1612,16 +1703,86 @@ function MatchesPage({ setPage, setSelectedMatch }: { setPage: (p: Page) => void
 function PlayerProfilePage({ player, onBack }: { player: Player; onBack: () => void }) {
   const cfg = RARITY_CFG[player.rarity]
   const [activeTab, setActiveTab] = useState<'stats' | 'history' | 'info'>('stats')
+  const [attrVote, setAttrVote] = useState<Record<string, number>>({})
+  const [attrSaving, setAttrSaving] = useState(false)
+  const { ratings, matches, attributeRatings, reload } = useData()
+  const { user } = useAuth()
 
-  const attrs = player.pos === 'GK'
-    ? [{ label: 'Reflexos', v: 91 }, { label: 'Posicionamento', v: 87 }, { label: 'Saída', v: 78 }, { label: 'Comando', v: 85 }, { label: 'Distribuição', v: 72 }]
-    : player.pos === 'ST'
-      ? [{ label: 'Finalização', v: 84 }, { label: 'Velocidade', v: 78 }, { label: 'Cabeceio', v: 72 }, { label: 'Drible', v: 76 }, { label: 'Posicionamento', v: 82 }]
-      : [{ label: 'Passe', v: 88 }, { label: 'Visão', v: 92 }, { label: 'Drible', v: 85 }, { label: 'Posicionamento', v: 83 }, { label: 'Finalização', v: 74 }]
+  const oppOf = (m: Match) => (isCruzeiro(m.home) ? m.away : m.home)
+  const resultLabel = (m: Match) => {
+    const cruzHome = isCruzeiro(m.home)
+    const cs = cruzHome ? m.homeScore : m.awayScore
+    const os = cruzHome ? m.awayScore : m.homeScore
+    const tag = cs > os ? 'V' : cs === os ? 'E' : 'D'
+    return `${tag} ${cs}–${os}`
+  }
 
-  const keyStats = player.pos === 'GK'
-    ? [{ label: 'Defesas', value: player.saves ?? 89, icon: '🧤' }, { label: 'Clean Sheets', value: player.cleanSheets ?? 14, icon: '🛡' }, { label: 'Partidas', value: player.matches, icon: '📅' }]
-    : [{ label: 'Gols', value: player.goals, icon: '⚽' }, { label: 'Assistências', value: player.assists, icon: 'A' }, { label: 'Partidas', value: player.matches, icon: '📅' }]
+  // Real per-match ratings for this player, oldest → newest.
+  const perMatch = (() => {
+    if (!player.dbId) return [] as { avg: number; n: number; match: Match; label: string }[]
+    const byFixture = new Map<string, { sum: number; n: number }>()
+    for (const r of ratings) {
+      if (r.player_id !== player.dbId) continue
+      const a = byFixture.get(r.fixture_id) ?? { sum: 0, n: 0 }
+      a.sum += Number(r.score)
+      a.n += 1
+      byFixture.set(r.fixture_id, a)
+    }
+    return [...byFixture.entries()]
+      .map(([fid, a]) => {
+        const m = matches.find(mm => mm.dbId === fid)
+        return m ? { avg: Math.round((a.sum / a.n) * 10) / 10, n: a.n, match: m, label: oppOf(m).slice(0, 3).toUpperCase() } : null
+      })
+      .filter((x): x is { avg: number; n: number; match: Match; label: string } => x !== null)
+      .sort((a, b) => (a.match.ts ?? 0) - (b.match.ts ?? 0))
+  })()
+  const hasHistory = perMatch.length > 0
+  const bestMatch = hasHistory ? perMatch.reduce((b, x) => (x.avg > b.avg ? x : b)) : null
+  const worstMatch = hasHistory ? perMatch.reduce((w, x) => (x.avg < w.avg ? x : w)) : null
+  const historyData = perMatch.map(x => ({ m: x.label, r: x.avg }))
+
+  // Community-voted attributes (0–99), averaged from attribute_ratings.
+  const attrLabels = attributesFor(player.pos)
+  const attrAvgMap = (() => {
+    const map = new Map<string, { sum: number; n: number }>()
+    for (const a of attributeRatings) {
+      if (a.player_id !== player.dbId) continue
+      const x = map.get(a.attribute) ?? { sum: 0, n: 0 }
+      x.sum += Number(a.score)
+      x.n += 1
+      map.set(a.attribute, x)
+    }
+    return map
+  })()
+  const attrs = attrLabels.map(label => {
+    const x = attrAvgMap.get(label)
+    return { label, v: x && x.n > 0 ? Math.round(x.sum / x.n) : null }
+  })
+  const attrVoters = new Set(
+    attributeRatings.filter(a => a.player_id === player.dbId).map(a => a.user_id),
+  ).size
+  const userVotedAttrs = !!user && attributeRatings.some(a => a.player_id === player.dbId && a.user_id === user.id)
+
+  const submitAttributes = async () => {
+    if (!user || !player.dbId) return
+    setAttrSaving(true)
+    const rows = attrLabels.map(label => ({
+      user_id: user.id,
+      player_id: player.dbId as string,
+      attribute: label,
+      score: attrVote[label] ?? 50,
+    }))
+    const { error } = await supabase.from('attribute_ratings').upsert(rows, { onConflict: 'user_id,player_id,attribute' })
+    setAttrSaving(false)
+    if (error) { console.error('Falha ao enviar atributos', error); alert('Não foi possível enviar os atributos.') }
+    else reload()
+  }
+
+  const keyStats: { label: string; value: string | number; icon: string }[] = [
+    { label: 'Nota média', value: fmtRating(player.rating), icon: '⭐' },
+    { label: 'Partidas avaliadas', value: perMatch.length, icon: '📅' },
+    { label: 'Overall', value: player.attrOverall ?? '–', icon: '🎯' },
+  ]
 
   return (
     <div className="pb-12">
@@ -1712,86 +1873,133 @@ function PlayerProfilePage({ player, onBack }: { player: Player; onBack: () => v
             </div>
 
             <div className="rounded-2xl p-5" style={{ background: '#0A1528', border: '1px solid rgba(255,255,255,0.06)' }}>
-              <h3 className="font-display font-bold text-white mb-5" style={{ fontSize: 14 }}>Atributos do Jogador</h3>
-              {attrs.map(({ label, v }) => (
-                <div key={label} className="mb-3.5">
-                  <div className="flex justify-between text-xs mb-1.5">
-                    <span style={{ color: '#7090B0' }}>{label}</span>
-                    <span className="font-bold" style={{ color: cfg.accent }}>{v}</span>
-                  </div>
-                  <div className="h-1.5 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.05)' }}>
-                    <div className="h-full rounded-full" style={{ width: `${v}%`, background: `linear-gradient(90deg, ${cfg.accent}70, ${cfg.accent})`, transition: 'width 0.8s ease' }} />
-                  </div>
-                </div>
-              ))}
+              <div className="flex items-center justify-between mb-5">
+                <h3 className="font-display font-bold text-white" style={{ fontSize: 14 }}>Atributos do Jogador</h3>
+                <span className="text-[10px]" style={{ color: '#5070A0' }}>{attrVoters} {attrVoters === 1 ? 'voto' : 'votos'}</span>
+              </div>
+
+              {userVotedAttrs ? (
+                <>
+                  {attrs.map(({ label, v }) => (
+                    <div key={label} className="mb-3.5">
+                      <div className="flex justify-between text-xs mb-1.5">
+                        <span style={{ color: '#7090B0' }}>{label}</span>
+                        <span className="font-bold" style={{ color: cfg.accent }}>{v ?? '–'}</span>
+                      </div>
+                      <div className="h-1.5 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.05)' }}>
+                        <div className="h-full rounded-full" style={{ width: `${v ?? 0}%`, background: `linear-gradient(90deg, ${cfg.accent}70, ${cfg.accent})`, transition: 'width 0.8s ease' }} />
+                      </div>
+                    </div>
+                  ))}
+                  <p className="text-[11px] mt-1" style={{ color: '#3A5070' }}>Você já votou nos atributos deste jogador. Acima está a média da torcida.</p>
+                </>
+              ) : (
+                <>
+                  <p className="text-xs mb-4" style={{ color: '#5070A0' }}>Dê sua nota (0–99) para cada atributo. Você pode votar uma vez.</p>
+                  {attrLabels.map(label => {
+                    const val = attrVote[label] ?? 50
+                    return (
+                      <div key={label} className="mb-3.5">
+                        <div className="flex justify-between text-xs mb-1.5">
+                          <span style={{ color: '#7090B0' }}>{label}</span>
+                          <span className="font-bold" style={{ color: cfg.accent }}>{val}</span>
+                        </div>
+                        <input type="range" min={0} max={99} value={val}
+                          onChange={e => setAttrVote(prev => ({ ...prev, [label]: Number(e.target.value) }))}
+                          className="w-full" style={{ accentColor: cfg.accent }} />
+                      </div>
+                    )
+                  })}
+                  <button onClick={submitAttributes} disabled={attrSaving}
+                    className="w-full mt-2 py-3 rounded-xl font-display font-bold text-white text-sm"
+                    style={{ background: 'linear-gradient(135deg, #003087, #1A5FCC)', opacity: attrSaving ? 0.6 : 1 }}>
+                    {attrSaving ? 'Enviando...' : 'Enviar atributos'}
+                  </button>
+                </>
+              )}
             </div>
 
-            {/* Best / worst match */}
-            <div className="grid grid-cols-2 gap-3">
-              {[
-                { label: 'Melhor Partida', opp: 'Atlético-MG', rating: 9.1, result: 'V 3–0', color: '#22C55E' },
-                { label: 'Pior Partida', opp: 'Corinthians', rating: 6.2, result: 'D 0–1', color: '#EF4444' },
-              ].map(({ label, opp, rating, result, color }) => (
-                <div key={label} className="rounded-2xl p-4"
-                  style={{ background: '#0A1528', border: `1px solid ${color}25` }}>
-                  <div className="text-[10px] font-bold tracking-widest uppercase mb-2" style={{ color: color + '80' }}>{label}</div>
-                  <div className="font-display font-black text-white" style={{ fontSize: 11, marginBottom: 4 }}>vs {opp}</div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs px-2 py-0.5 rounded-full font-semibold" style={{ background: color + '15', color }}>{result}</span>
-                    <span className="font-display font-black" style={{ fontSize: 20, color }}>{rating.toFixed(1)}</span>
+            {/* Best / worst match (real, from votes) */}
+            {hasHistory && bestMatch && worstMatch ? (
+              <div className="grid grid-cols-2 gap-3">
+                {[
+                  { label: 'Melhor Partida', item: bestMatch, color: '#22C55E' },
+                  { label: 'Pior Partida', item: worstMatch, color: '#EF4444' },
+                ].map(({ label, item, color }) => (
+                  <div key={label} className="rounded-2xl p-4"
+                    style={{ background: '#0A1528', border: `1px solid ${color}25` }}>
+                    <div className="text-[10px] font-bold tracking-widest uppercase mb-2" style={{ color: color + '80' }}>{label}</div>
+                    <div className="font-display font-black text-white" style={{ fontSize: 11, marginBottom: 4 }}>vs {oppOf(item.match)}</div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs px-2 py-0.5 rounded-full font-semibold" style={{ background: color + '15', color }}>{resultLabel(item.match)}</span>
+                      <span className="font-display font-black" style={{ fontSize: 20, color }}>{item.avg.toFixed(1)}</span>
+                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            ) : (
+              <div className="rounded-2xl p-5 text-center" style={{ background: '#0A1528', border: '1px solid rgba(255,255,255,0.06)' }}>
+                <p className="text-xs" style={{ color: '#5070A0' }}>Sem avaliações de partidas ainda para este jogador.</p>
+              </div>
+            )}
           </div>
         )}
 
         {activeTab === 'history' && (
-          <div className="space-y-5">
-            <div className="rounded-2xl p-5" style={{ background: '#0A1528', border: '1px solid rgba(255,255,255,0.06)' }}>
-              <h3 className="font-display font-bold text-white mb-4" style={{ fontSize: 14 }}>Evolução da Nota</h3>
-              <div style={{ height: 180 }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={CHART_DATA} margin={{ top: 8, right: 8, left: -20, bottom: 0 }}>
-                    <defs>
-                      <linearGradient id={`rg-${player.id}`} x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor={cfg.accent} stopOpacity={0.35} />
-                        <stop offset="95%" stopColor={cfg.accent} stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
-                    <XAxis dataKey="m" tick={{ fill: '#5070A0', fontSize: 10 }} axisLine={false} tickLine={false} />
-                    <YAxis domain={[5, 10]} tick={{ fill: '#5070A0', fontSize: 10 }} axisLine={false} tickLine={false} />
-                    <Tooltip contentStyle={{ background: '#0F2040', border: '1px solid rgba(26,95,204,0.3)', borderRadius: 12, color: 'white', fontSize: 12 }}
-                      formatter={(v: number) => [v.toFixed(1), 'Nota']} />
-                    <Area type="monotone" dataKey="r" stroke={cfg.accent} strokeWidth={2.5}
-                      fill={`url(#rg-${player.id})`} dot={{ fill: cfg.accent, r: 3.5, strokeWidth: 0 }} />
-                  </AreaChart>
-                </ResponsiveContainer>
+          hasHistory ? (
+            <div className="space-y-5">
+              <div className="rounded-2xl p-5" style={{ background: '#0A1528', border: '1px solid rgba(255,255,255,0.06)' }}>
+                <h3 className="font-display font-bold text-white mb-4" style={{ fontSize: 14 }}>Evolução da Nota</h3>
+                <div style={{ height: 180 }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={historyData} margin={{ top: 8, right: 8, left: -20, bottom: 0 }}>
+                      <defs>
+                        <linearGradient id={`rg-${player.id}`} x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor={cfg.accent} stopOpacity={0.35} />
+                          <stop offset="95%" stopColor={cfg.accent} stopOpacity={0} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
+                      <XAxis dataKey="m" tick={{ fill: '#5070A0', fontSize: 10 }} axisLine={false} tickLine={false} />
+                      <YAxis domain={[0, 10]} tick={{ fill: '#5070A0', fontSize: 10 }} axisLine={false} tickLine={false} />
+                      <Tooltip contentStyle={{ background: '#0F2040', border: '1px solid rgba(26,95,204,0.3)', borderRadius: 12, color: 'white', fontSize: 12 }}
+                        formatter={(v: number) => [v.toFixed(1), 'Nota']} />
+                      <Area type="monotone" dataKey="r" stroke={cfg.accent} strokeWidth={2.5}
+                        fill={`url(#rg-${player.id})`} dot={{ fill: cfg.accent, r: 3.5, strokeWidth: 0 }} />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <h3 className="font-display font-bold text-white mb-3" style={{ fontSize: 14 }}>Últimas Partidas</h3>
+                {[...perMatch].reverse().slice(0, 8).map((x, i) => {
+                  const high = x.avg >= 8
+                  const mid = x.avg >= 6.5 && x.avg < 8
+                  const rColor = high ? '#22C55E' : mid ? '#F59E0B' : '#EF4444'
+                  return (
+                    <div key={i} className="flex items-center gap-4 px-4 py-3 rounded-xl"
+                      style={{ background: '#0A1528', border: '1px solid rgba(255,255,255,0.04)' }}>
+                      <div className="w-8 h-8 rounded-lg flex items-center justify-center font-bold text-xs"
+                        style={{ background: 'rgba(26,95,204,0.15)', color: '#4A8EE8' }}>vs</div>
+                      <div className="flex-1 min-w-0">
+                        <span className="font-display font-bold text-white text-sm">{oppOf(x.match)}</span>
+                        <div className="text-[10px]" style={{ color: '#3A5070' }}>{resultLabel(x.match)} · {x.n} {x.n === 1 ? 'voto' : 'votos'}</div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {high ? <TrendingUp size={12} className="text-emerald-400" /> : mid ? <Minus size={12} className="text-yellow-400" /> : <TrendingDown size={12} className="text-red-400" />}
+                        <span className="font-display font-black" style={{ fontSize: 18, color: rColor }}>{x.avg.toFixed(1)}</span>
+                      </div>
+                    </div>
+                  )
+                })}
               </div>
             </div>
-
-            <div className="space-y-2">
-              <h3 className="font-display font-bold text-white mb-3" style={{ fontSize: 14 }}>Últimas Partidas</h3>
-              {CHART_DATA.slice().reverse().slice(0, 6).map((d, i) => {
-                const high = d.r >= 8
-                const mid = d.r >= 6.5 && d.r < 8
-                const rColor = high ? '#22C55E' : mid ? '#F59E0B' : '#EF4444'
-                return (
-                  <div key={i} className="flex items-center gap-4 px-4 py-3 rounded-xl"
-                    style={{ background: '#0A1528', border: '1px solid rgba(255,255,255,0.04)' }}>
-                    <div className="w-8 h-8 rounded-lg flex items-center justify-center font-bold text-xs"
-                      style={{ background: 'rgba(26,95,204,0.15)', color: '#4A8EE8' }}>vs</div>
-                    <span className="font-display font-bold text-white text-sm flex-1">{d.m}</span>
-                    <div className="flex items-center gap-2">
-                      {high ? <TrendingUp size={12} className="text-emerald-400" /> : mid ? <Minus size={12} className="text-yellow-400" /> : <TrendingDown size={12} className="text-red-400" />}
-                      <span className="font-display font-black" style={{ fontSize: 18, color: rColor }}>{d.r.toFixed(1)}</span>
-                    </div>
-                  </div>
-                )
-              })}
+          ) : (
+            <div className="rounded-2xl p-8 text-center" style={{ background: '#0A1528', border: '1px solid rgba(255,255,255,0.06)' }}>
+              <p className="text-sm" style={{ color: '#5070A0' }}>Este jogador ainda não recebeu avaliações em nenhuma partida.</p>
             </div>
-          </div>
+          )
         )}
 
         {activeTab === 'info' && (
@@ -1943,7 +2151,7 @@ function MatchDetailPage({ match, onBack }: { match: Match; onBack: () => void }
 function RatingPage() {
   const { players: PLAYERS, matches: MATCHES, reload } = useData()
   const { user } = useAuth()
-  const lastFinished = MATCHES.find(m => m.status === 'finished') ?? null
+  const votingMatch = MATCHES.find(m => m.liberado) ?? null
   const [currentIdx, setCurrentIdx] = useState(0)
   const [ratings, setRatings] = useState<Record<number, number>>({})
   const [hoveredRating, setHoveredRating] = useState<number | null>(null)
@@ -1968,14 +2176,14 @@ function RatingPage() {
     const finalRatings = { ...ratings }
     PLAYERS.forEach(p => { if (finalRatings[p.id] === undefined) finalRatings[p.id] = 5 })
     setRatings(finalRatings)
-    if (user && lastFinished?.dbId) {
+    if (user && votingMatch?.dbId) {
       const rows = PLAYERS
         .filter(p => p.dbId)
         .map(p => ({
           user_id: user.id,
           user_name: user.name,
           player_id: p.dbId as string,
-          fixture_id: lastFinished.dbId as string,
+          fixture_id: votingMatch.dbId as string,
           score: finalRatings[p.id] ?? 5,
         }))
       const { error } = await supabase.from('ratings').upsert(rows, { onConflict: 'user_id,player_id,fixture_id' })
@@ -1983,6 +2191,21 @@ function RatingPage() {
       else reload()
     }
     setSubmitted(true)
+  }
+
+  if (!votingMatch) {
+    return (
+      <div className="flex flex-col items-center justify-center px-6 text-center" style={{ minHeight: 'calc(100vh - 60px)' }}>
+        <div className="w-16 h-16 rounded-full flex items-center justify-center mb-5"
+          style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}>
+          <Vote size={28} style={{ color: '#3A5070' }} />
+        </div>
+        <h2 className="font-display font-black text-white mb-2" style={{ fontSize: 22 }}>Votação fechada</h2>
+        <p className="text-sm" style={{ color: '#5070A0', maxWidth: 340 }}>
+          Nenhum jogo está liberado para avaliação no momento. Volte quando o próximo jogo for liberado.
+        </p>
+      </div>
+    )
   }
 
   if (submitted) {
@@ -2021,7 +2244,7 @@ function RatingPage() {
         <div className="flex items-center justify-between mb-3">
           <div>
             <h2 className="font-display font-black text-white" style={{ fontSize: 22 }}>Votar</h2>
-            <p className="text-xs mt-0.5" style={{ color: '#5070A0' }}>{lastFinished ? `${lastFinished.home} × ${lastFinished.away} · ${lastFinished.date}` : 'Avalie os jogadores do Cruzeiro'}</p>
+            <p className="text-xs mt-0.5" style={{ color: '#5070A0' }}>{votingMatch ? `${votingMatch.home} × ${votingMatch.away} · ${votingMatch.date}` : 'Nenhum jogo liberado para votação'}</p>
           </div>
           <div className="flex items-center gap-3">
             <span className="font-display font-bold" style={{ color: '#3A5070', fontSize: 13 }}>{Object.keys(ratings).length}/{PLAYERS.length} avaliados</span>
@@ -2185,7 +2408,39 @@ function RatingPage() {
 // ─── Admin Page ───────────────────────────────────────────────────────────────
 
 function AdminPage() {
-  const { players: PLAYERS } = useData()
+  const { players: PLAYERS, matches: MATCHES, reload } = useData()
+  const [savingId, setSavingId] = useState<string | null>(null)
+  const [compFilter, setCompFilter] = useState<string>('all')
+
+  const totalVotes = PLAYERS.reduce((s, p) => s + p.votes, 0)
+  const ratedPlayers = PLAYERS.filter(p => p.votes > 0).length
+  const releasedCount = MATCHES.filter(m => m.liberado).length
+  const topVoted = [...PLAYERS].sort((a, b) => b.votes - a.votes).slice(0, 5)
+  const maxVotes = topVoted[0]?.votes || 1
+
+  const competitions = Array.from(new Set(MATCHES.map(m => m.comp)))
+  const listed = MATCHES.filter(m => compFilter === 'all' || m.comp === compFilter)
+
+  const toggleLiberado = async (m: Match) => {
+    if (!m.dbId) return
+    setSavingId(m.dbId)
+    const { error } = await supabase.from('fixtures').update({ liberado: !m.liberado }).eq('id', m.dbId)
+    setSavingId(null)
+    if (error) {
+      console.error('Falha ao atualizar liberação', error)
+      alert('Não foi possível atualizar. Verifique se você é admin.')
+    } else {
+      reload()
+    }
+  }
+
+  const stats = [
+    { icon: Vote, label: 'Total de votos', value: totalVotes.toLocaleString('pt-BR'), color: '#4A8EE8' },
+    { icon: Users, label: 'Jogadores avaliados', value: String(ratedPlayers), color: '#22C55E' },
+    { icon: CheckCircle, label: 'Jogos liberados', value: String(releasedCount), color: '#C4972A' },
+    { icon: Activity, label: 'Partidas no total', value: String(MATCHES.length), color: '#8B5CF6' },
+  ]
+
   return (
     <div className="px-6 pb-12">
       <div className="pt-8 pb-6">
@@ -2193,23 +2448,15 @@ function AdminPage() {
           <Shield size={15} style={{ color: '#C4972A' }} />
           <span className="text-xs font-bold tracking-widest uppercase" style={{ color: '#C4972A' }}>Painel Administrativo</span>
         </div>
-        <h2 className="font-display font-black text-white mb-1" style={{ fontSize: 30 }}>Dashboard</h2>
-        <p className="text-sm" style={{ color: '#5070A0' }}>Temporada 2024 · Brasileirão Série A</p>
+        <h2 className="font-display font-black text-white mb-1" style={{ fontSize: 30 }}>Gestão de Votação</h2>
+        <p className="text-sm" style={{ color: '#5070A0' }}>Libere os jogos que a torcida pode avaliar</p>
       </div>
 
       <div className="grid grid-cols-4 gap-3 mb-8">
-        {[
-          { icon: Vote, label: 'Total Votos', value: '62.080', delta: '+12%', color: '#4A8EE8' },
-          { icon: Users, label: 'Usuários Ativos', value: '8.420', delta: '+24%', color: '#22C55E' },
-          { icon: Star, label: 'Nota Média', value: '7.38', delta: '+0.2', color: '#C4972A' },
-          { icon: Activity, label: 'Partidas Avaliadas', value: '17', delta: '34 total', color: '#8B5CF6' },
-        ].map(({ icon: Icon, label, value, delta, color }) => (
+        {stats.map(({ icon: Icon, label, value, color }) => (
           <div key={label} className="rounded-2xl p-5" style={{ background: '#0A1528', border: '1px solid rgba(255,255,255,0.05)' }}>
-            <div className="flex items-center justify-between mb-3">
-              <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: color + '12' }}>
-                <Icon size={16} style={{ color }} />
-              </div>
-              <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: '#22C55E12', color: '#22C55E' }}>{delta}</span>
+            <div className="w-9 h-9 rounded-xl flex items-center justify-center mb-3" style={{ background: color + '12' }}>
+              <Icon size={16} style={{ color }} />
             </div>
             <div className="font-display font-black text-white" style={{ fontSize: 24 }}>{value}</div>
             <div className="text-xs mt-0.5" style={{ color: '#5070A0' }}>{label}</div>
@@ -2217,67 +2464,66 @@ function AdminPage() {
         ))}
       </div>
 
-      <div className="grid grid-cols-3 gap-6 mb-6">
-        <div className="col-span-2 rounded-2xl p-5" style={{ background: '#0A1528', border: '1px solid rgba(255,255,255,0.05)' }}>
-          <div className="flex items-center justify-between mb-5">
-            <h3 className="font-display font-bold text-white" style={{ fontSize: 14 }}>Votos por Partida</h3>
-            <span className="text-xs" style={{ color: '#3A5070' }}>Temporada 2024</span>
-          </div>
-          <div style={{ height: 180 }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={CHART_DATA} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false} />
-                <XAxis dataKey="m" tick={{ fill: '#5070A0', fontSize: 10 }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fill: '#5070A0', fontSize: 10 }} axisLine={false} tickLine={false} />
-                <Tooltip contentStyle={{ background: '#0F2040', border: '1px solid rgba(26,95,204,0.3)', borderRadius: 12, color: 'white', fontSize: 12 }}
-                  cursor={{ fill: 'rgba(26,95,204,0.07)' }} />
-                <Bar dataKey="votes" fill="#1A5FCC" radius={[6, 6, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+      {/* Liberar jogos para votação */}
+      <div className="rounded-2xl overflow-hidden mb-6" style={{ background: '#0A1528', border: '1px solid rgba(255,255,255,0.05)' }}>
+        <div className="px-5 py-4 flex items-center justify-between flex-wrap gap-3" style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+          <h3 className="font-display font-bold text-white" style={{ fontSize: 14 }}>Liberar jogos para votação</h3>
+          <div className="flex gap-2 flex-wrap">
+            {['all', ...competitions].map(c => (
+              <button key={c} onClick={() => setCompFilter(c)}
+                className="px-3 py-1 rounded-lg text-[11px] font-semibold transition-all duration-150"
+                style={{ background: compFilter === c ? 'rgba(26,95,204,0.18)' : 'rgba(255,255,255,0.04)', color: compFilter === c ? '#4A8EE8' : '#5070A0', border: compFilter === c ? '1px solid rgba(26,95,204,0.4)' : '1px solid transparent' }}>
+                {c === 'all' ? 'Todas' : c}
+              </button>
+            ))}
           </div>
         </div>
+        <div style={{ maxHeight: 460, overflowY: 'auto' }}>
+          {listed.map((m, i) => (
+            <div key={m.id} className="flex items-center gap-4 px-5 py-3"
+              style={{ borderBottom: i < listed.length - 1 ? '1px solid rgba(255,255,255,0.04)' : 'none' }}>
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-semibold text-white truncate">{m.home} × {m.away}</div>
+                <div className="text-[11px] mt-0.5" style={{ color: '#5070A0' }}>
+                  {m.comp} · {m.date} · {m.status === 'finished' ? 'Encerrado' : 'Agendado'}
+                </div>
+              </div>
+              <button onClick={() => toggleLiberado(m)} disabled={savingId === m.dbId}
+                className="px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 flex-shrink-0 transition-all duration-150"
+                style={{
+                  background: m.liberado ? 'rgba(34,197,94,0.15)' : 'rgba(255,255,255,0.05)',
+                  color: m.liberado ? '#22C55E' : '#5070A0',
+                  border: `1px solid ${m.liberado ? 'rgba(34,197,94,0.35)' : 'rgba(255,255,255,0.08)'}`,
+                  opacity: savingId === m.dbId ? 0.5 : 1,
+                }}>
+                {savingId === m.dbId ? '...' : m.liberado ? <><CheckCircle size={12} /> Liberado</> : 'Liberar'}
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
 
-        <div className="rounded-2xl p-5" style={{ background: '#0A1528', border: '1px solid rgba(255,255,255,0.05)' }}>
-          <h3 className="font-display font-bold text-white mb-4" style={{ fontSize: 14 }}>Mais Votados</h3>
+      {/* Mais votados (real) */}
+      <div className="rounded-2xl p-5" style={{ background: '#0A1528', border: '1px solid rgba(255,255,255,0.05)' }}>
+        <h3 className="font-display font-bold text-white mb-4" style={{ fontSize: 14 }}>Mais Votados</h3>
+        {topVoted.some(p => p.votes > 0) ? (
           <div className="space-y-3">
-            {PLAYERS.slice(0, 5).map((p, i) => (
+            {topVoted.map((p, i) => (
               <div key={p.id} className="flex items-center gap-3">
                 <span className="font-display font-black text-xs w-4 text-center" style={{ color: i === 0 ? '#C4972A' : '#2A3A50' }}>#{i + 1}</span>
                 <div className="flex-1 min-w-0">
                   <div className="text-xs font-semibold text-white truncate">{p.short}</div>
                   <div className="h-1 rounded-full mt-1 overflow-hidden" style={{ background: 'rgba(255,255,255,0.05)' }}>
-                    <div className="h-full rounded-full" style={{ width: `${(p.votes / 13000) * 100}%`, background: RARITY_CFG[p.rarity].accent }} />
+                    <div className="h-full rounded-full" style={{ width: `${(p.votes / maxVotes) * 100}%`, background: RARITY_CFG[p.rarity].accent }} />
                   </div>
                 </div>
                 <span className="text-xs font-bold" style={{ color: '#3A5070' }}>{fmtVotes(p.votes)}</span>
               </div>
             ))}
           </div>
-        </div>
-      </div>
-
-      <div className="rounded-2xl overflow-hidden" style={{ background: '#0A1528', border: '1px solid rgba(255,255,255,0.05)' }}>
-        <div className="px-5 py-4" style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-          <h3 className="font-display font-bold text-white" style={{ fontSize: 14 }}>Atividade Recente</h3>
-        </div>
-        {[
-          { action: 'Nova avaliação', detail: 'rodrigo_cruzeiro avaliou Matheus Pereira: 9.5', time: '2 min', icon: Star, color: '#C4972A' },
-          { action: 'Partida adicionada', detail: 'Cruzeiro × Internacional adicionada — 20/07', time: '1h', icon: Calendar, color: '#4A8EE8' },
-          { action: 'Novo usuário', detail: 'cabuloso_bh se registrou na plataforma', time: '2h', icon: Users, color: '#22C55E' },
-          { action: 'Nova avaliação', detail: 'raposa_eterna avaliou Kaio Jorge: 8.0', time: '3h', icon: Star, color: '#C4972A' },
-        ].map(({ action, detail, time, icon: Icon, color }, i, arr) => (
-          <div key={i} className="flex items-start gap-4 px-5 py-4"
-            style={{ borderBottom: i < arr.length - 1 ? '1px solid rgba(255,255,255,0.04)' : 'none' }}>
-            <div className="w-8 h-8 rounded-lg flex-shrink-0 flex items-center justify-center" style={{ background: color + '12' }}>
-              <Icon size={14} style={{ color }} />
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="text-xs font-semibold text-white">{action}</div>
-              <div className="text-xs mt-0.5 truncate" style={{ color: '#5070A0' }}>{detail}</div>
-            </div>
-            <span className="text-xs flex-shrink-0" style={{ color: '#2A3A50' }}>{time}</span>
-          </div>
-        ))}
+        ) : (
+          <p className="text-xs" style={{ color: '#5070A0' }}>Nenhum voto ainda.</p>
+        )}
       </div>
     </div>
   )
@@ -2599,7 +2845,7 @@ function Field({ label, error, children }: { label: string; error?: string; chil
 // ─── App ──────────────────────────────────────────────────────────────────────
 
 function Root() {
-  const { user, loading: authLoading, recovery } = useAuth()
+  const { user, loading: authLoading, recovery, isAdmin } = useAuth()
   const [page, setPage] = useState<Page>('home')
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null)
   const [selectedMatch, setSelectedMatch] = useState<Match | null>(null)
@@ -2635,7 +2881,7 @@ function Root() {
       <Sidebar page={page} setPage={navigate} />
 
       <main style={{ marginLeft: 60, minHeight: '100vh' }}>
-        {!detailPage && <TopBar title={PAGE_TITLES[page]} />}
+        {!detailPage && <TopBar title={PAGE_TITLES[page]} onSelectPlayer={(p) => { setSelectedPlayer(p); navigate('profile') }} />}
 
         {page === 'home' && (
           <HomePage setPage={navigate} setSelectedPlayer={setSelectedPlayer} setSelectedMatch={setSelectedMatch} />
@@ -2650,7 +2896,7 @@ function Root() {
           <MatchesPage setPage={navigate} setSelectedMatch={setSelectedMatch} />
         )}
         {page === 'rate' && <RatingPage />}
-        {page === 'admin' && <AdminPage />}
+        {page === 'admin' && isAdmin && <AdminPage />}
         {page === 'profile' && selectedPlayer && (
           <PlayerProfilePage player={selectedPlayer} onBack={() => setPage(prevPage)} />
         )}
