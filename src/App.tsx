@@ -366,10 +366,12 @@ interface AuthUser {
 interface AuthState {
   user: AuthUser | null
   loading: boolean
+  recovery: boolean
   signOut: () => void
+  endRecovery: () => void
 }
 
-const AuthContext = createContext<AuthState>({ user: null, loading: true, signOut: () => {} })
+const AuthContext = createContext<AuthState>({ user: null, loading: true, recovery: false, signOut: () => {}, endRecovery: () => {} })
 
 function useAuth(): AuthState {
   return useContext(AuthContext)
@@ -386,6 +388,7 @@ function mapAuthUser(session: { user?: { id: string; email?: string; user_metada
 function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null)
   const [loading, setLoading] = useState(true)
+  const [recovery, setRecovery] = useState(false)
 
   useEffect(() => {
     let active = true
@@ -394,7 +397,9 @@ function AuthProvider({ children }: { children: ReactNode }) {
       setUser(mapAuthUser(data.session))
       setLoading(false)
     })
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
+      // Arriving from a password-reset email opens a recovery session.
+      if (event === 'PASSWORD_RECOVERY') setRecovery(true)
       setUser(mapAuthUser(session))
     })
     return () => {
@@ -407,7 +412,87 @@ function AuthProvider({ children }: { children: ReactNode }) {
     void supabase.auth.signOut()
   }
 
-  return <AuthContext.Provider value={{ user, loading, signOut }}>{children}</AuthContext.Provider>
+  const endRecovery = (): void => {
+    setRecovery(false)
+  }
+
+  return (
+    <AuthContext.Provider value={{ user, loading, recovery, signOut, endRecovery }}>
+      {children}
+    </AuthContext.Provider>
+  )
+}
+
+// ─── Reset Password Page (from the recovery email link) ─────────────────────
+
+function ResetPasswordPage() {
+  const { endRecovery, signOut } = useAuth()
+  const [password, setPassword] = useState('')
+  const [confirm, setConfirm] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  const [done, setDone] = useState(false)
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (password.length < 6) { setError('Mínimo 6 caracteres'); return }
+    if (password !== confirm) { setError('Senhas não coincidem'); return }
+    setError('')
+    setLoading(true)
+    const { error: err } = await supabase.auth.updateUser({ password })
+    if (err) { setError(err.message); setLoading(false); return }
+    setDone(true)
+  }
+
+  return (
+    <div className="flex min-h-screen items-center justify-center px-6" style={{ backgroundColor: '#030910' }}>
+      <div style={{ width: '100%', maxWidth: 400 }}>
+        <div className="flex justify-center mb-8">
+          <JeanScoreLogo width={170} showStars={false} />
+        </div>
+        {done ? (
+          <div className="rounded-2xl p-6 text-center" style={{ background: '#0A1528', border: '1px solid rgba(255,255,255,0.06)' }}>
+            <div className="w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-4"
+              style={{ background: 'linear-gradient(135deg, #003087, #1A5FCC)' }}>
+              <CheckCircle size={28} className="text-white" />
+            </div>
+            <h2 className="font-display font-black text-white mb-2" style={{ fontSize: 20 }}>Senha alterada!</h2>
+            <p className="text-sm mb-6" style={{ color: '#5070A0' }}>Sua nova senha já está valendo.</p>
+            <button onClick={endRecovery}
+              className="w-full py-3 rounded-2xl font-display font-bold text-white text-sm"
+              style={{ background: 'linear-gradient(135deg, #003087, #1A5FCC)' }}>
+              Continuar
+            </button>
+          </div>
+        ) : (
+          <>
+            <div className="mb-8 text-center">
+              <h2 className="font-display font-black text-white mb-1.5" style={{ fontSize: 26 }}>Nova senha</h2>
+              <p className="text-sm" style={{ color: '#5070A0' }}>Defina a nova senha da sua conta</p>
+            </div>
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <input type="password" placeholder="Nova senha" value={password} onChange={e => setPassword(e.target.value)}
+                className="w-full px-4 py-3 rounded-xl text-sm text-white outline-none"
+                style={{ background: '#0A1528', border: '1px solid rgba(255,255,255,0.07)', fontFamily: 'Inter, sans-serif' }} />
+              <input type="password" placeholder="Confirmar nova senha" value={confirm} onChange={e => setConfirm(e.target.value)}
+                className="w-full px-4 py-3 rounded-xl text-sm text-white outline-none"
+                style={{ background: '#0A1528', border: '1px solid rgba(255,255,255,0.07)', fontFamily: 'Inter, sans-serif' }} />
+              {error && <p className="text-xs" style={{ color: '#FF6060' }}>{error}</p>}
+              <button type="submit" disabled={loading}
+                className="w-full py-3 rounded-2xl font-display font-bold text-white text-sm"
+                style={{ background: 'linear-gradient(135deg, #003087, #1A5FCC)', opacity: loading ? 0.6 : 1 }}>
+                {loading ? 'Salvando...' : 'Salvar nova senha'}
+              </button>
+              <button type="button" onClick={() => { signOut(); endRecovery() }}
+                className="w-full py-2 text-xs font-semibold" style={{ color: '#5070A0' }}>
+                Cancelar
+              </button>
+            </form>
+          </>
+        )}
+      </div>
+    </div>
+  )
 }
 
 // ─── Small Components ─────────────────────────────────────────────────────────
@@ -2205,6 +2290,8 @@ function AuthPage() {
   const [form, setForm] = useState({ name: '', email: '', password: '', confirm: '' })
   const [loading, setLoading] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
+  const [forgot, setForgot] = useState(false)
+  const [forgotSent, setForgotSent] = useState(false)
 
   const set = (k: string) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setForm(f => ({ ...f, [k]: e.target.value }))
@@ -2260,6 +2347,67 @@ function AuthPage() {
       setErrors({ email: 'Modo visitante indisponível — crie uma conta para entrar.' })
       setLoading(false)
     }
+  }
+
+  const handleForgot = async () => {
+    if (!form.email.includes('@')) { setErrors({ email: 'Informe um e-mail válido' }); return }
+    setErrors({})
+    setLoading(true)
+    const { error } = await supabase.auth.resetPasswordForEmail(form.email, {
+      redirectTo: window.location.origin + import.meta.env.BASE_URL,
+    })
+    setLoading(false)
+    if (error) setErrors({ email: error.message })
+    else setForgotSent(true)
+  }
+
+  // Forgot-password panel (request the reset email).
+  if (forgot) {
+    return (
+      <div className="flex min-h-screen items-center justify-center px-6" style={{ backgroundColor: '#030910' }}>
+        <div style={{ width: '100%', maxWidth: 400 }}>
+          <div className="flex justify-center mb-8">
+            <JeanScoreLogo width={170} showStars={false} />
+          </div>
+          {forgotSent ? (
+            <div className="rounded-2xl p-6 text-center" style={{ background: '#0A1528', border: '1px solid rgba(255,255,255,0.06)' }}>
+              <div className="w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-4" style={{ background: 'linear-gradient(135deg, #003087, #1A5FCC)' }}>
+                <CheckCircle size={28} className="text-white" />
+              </div>
+              <h2 className="font-display font-black text-white mb-2" style={{ fontSize: 20 }}>Verifique seu e-mail</h2>
+              <p className="text-sm mb-6" style={{ color: '#5070A0' }}>Enviamos um link para <span className="text-white font-semibold">{form.email}</span> redefinir sua senha.</p>
+              <button onClick={() => { setForgot(false); setForgotSent(false) }}
+                className="w-full py-3 rounded-2xl font-display font-bold text-white text-sm"
+                style={{ background: 'linear-gradient(135deg, #003087, #1A5FCC)' }}>
+                Voltar ao login
+              </button>
+            </div>
+          ) : (
+            <>
+              <div className="mb-8 text-center">
+                <h2 className="font-display font-black text-white mb-1.5" style={{ fontSize: 26 }}>Esqueci minha senha</h2>
+                <p className="text-sm" style={{ color: '#5070A0' }}>Informe seu e-mail e enviaremos um link de redefinição</p>
+              </div>
+              <div className="space-y-4">
+                <input type="email" placeholder="Seu e-mail" value={form.email} onChange={set('email')}
+                  className="w-full px-4 py-3 rounded-xl text-sm text-white outline-none"
+                  style={{ background: '#0A1528', border: `1px solid ${errors.email ? '#EF444450' : 'rgba(255,255,255,0.07)'}`, fontFamily: 'Inter, sans-serif' }} />
+                {errors.email && <p className="text-xs" style={{ color: '#FF6060' }}>{errors.email}</p>}
+                <button onClick={handleForgot} disabled={loading}
+                  className="w-full py-3 rounded-2xl font-display font-bold text-white text-sm"
+                  style={{ background: 'linear-gradient(135deg, #003087, #1A5FCC)', opacity: loading ? 0.6 : 1 }}>
+                  {loading ? 'Enviando...' : 'Enviar link de redefinição'}
+                </button>
+                <button type="button" onClick={() => { setForgot(false); setErrors({}) }}
+                  className="w-full py-2 text-xs font-semibold" style={{ color: '#5070A0' }}>
+                  Voltar ao login
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -2405,6 +2553,13 @@ function AuthPage() {
             </button>
           </form>
 
+          {tab === 'login' && (
+            <button type="button" onClick={() => { setForgot(true); setForgotSent(false); setErrors({}) }}
+              className="w-full mt-3 text-xs font-semibold text-center" style={{ color: '#4A8EE8' }}>
+              Esqueci minha senha
+            </button>
+          )}
+
           {/* Divider */}
           <div className="flex items-center gap-3 my-6">
             <div className="flex-1 h-px" style={{ background: 'rgba(255,255,255,0.06)' }} />
@@ -2444,7 +2599,7 @@ function Field({ label, error, children }: { label: string; error?: string; chil
 // ─── App ──────────────────────────────────────────────────────────────────────
 
 function Root() {
-  const { user, loading: authLoading } = useAuth()
+  const { user, loading: authLoading, recovery } = useAuth()
   const [page, setPage] = useState<Page>('home')
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null)
   const [selectedMatch, setSelectedMatch] = useState<Match | null>(null)
@@ -2471,6 +2626,7 @@ function Root() {
       </div>
     )
   }
+  if (recovery) return <ResetPasswordPage />
   if (!user) return <AuthPage />
 
   return (
