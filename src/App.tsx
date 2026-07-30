@@ -28,10 +28,24 @@ interface Player {
   nat: string; age: number; cleanSheets?: number; saves?: number; photo?: string; dbId?: string; attrOverall?: number; flagCode?: string;
 }
 
+/** Editable per-match statistics. Each key maps to a home/away pair. */
+const STAT_FIELDS = [
+  { key: 'possession', label: 'Posse de Bola', unit: '%' },
+  { key: 'shots', label: 'Finalizações', unit: '' },
+  { key: 'shots_target', label: 'Chutes no Gol', unit: '' },
+  { key: 'corners', label: 'Escanteios', unit: '' },
+  { key: 'fouls', label: 'Faltas', unit: '' },
+  { key: 'yellow', label: 'Cartões Amarelos', unit: '' },
+] as const
+
+type StatKey = typeof STAT_FIELDS[number]['key']
+type MatchStats = Partial<Record<StatKey, { home: number; away: number }>>
+
 interface Match {
   id: number; home: string; away: string; homeScore: number; awayScore: number;
   date: string; comp: string; status: 'live' | 'finished' | 'upcoming';
   minute?: number; venue: string; round: string; dbId?: string; liberado?: boolean; ts?: number;
+  stats?: MatchStats;
 }
 
 // ─── Data ─────────────────────────────────────────────────────────────────────
@@ -160,6 +174,13 @@ interface DbFixtureRow {
   stadium: string | null
   status: string
   liberado: boolean
+  // Optional per-match statistics columns (added via supabase-stats.sql).
+  possession_home?: number | null; possession_away?: number | null
+  shots_home?: number | null; shots_away?: number | null
+  shots_target_home?: number | null; shots_target_away?: number | null
+  corners_home?: number | null; corners_away?: number | null
+  fouls_home?: number | null; fouls_away?: number | null
+  yellow_home?: number | null; yellow_away?: number | null
 }
 
 const POS_BY_CATEGORY: Record<DbSquadRow['position'], Pos> = {
@@ -222,6 +243,14 @@ function fmtFixtureDate(iso: string): string {
 }
 
 function mapFixtureRowToMatch(row: DbFixtureRow, index: number): Match {
+  // Fold the optional stat columns into a compact structure. A stat is included
+  // when at least one side has a value (null columns are treated as 0).
+  const stats: MatchStats = {}
+  for (const { key } of STAT_FIELDS) {
+    const h = (row as Record<string, unknown>)[`${key}_home`] as number | null | undefined
+    const a = (row as Record<string, unknown>)[`${key}_away`] as number | null | undefined
+    if (h != null || a != null) stats[key] = { home: h ?? 0, away: a ?? 0 }
+  }
   return {
     id: index + 1,
     home: row.home_team,
@@ -237,6 +266,7 @@ function mapFixtureRowToMatch(row: DbFixtureRow, index: number): Match {
     dbId: row.id,
     liberado: row.liberado ?? false,
     ts: row.ts,
+    stats: Object.keys(stats).length > 0 ? stats : undefined,
   }
 }
 
@@ -358,7 +388,7 @@ function DataProvider({ children }: { children: ReactNode }) {
       try {
         const [squad, fixtures] = await Promise.all([
           supaGet<DbSquadRow[]>('squad?select=id,name,position,number,photo,nationality&order=name.asc'),
-          supaGet<DbFixtureRow[]>('fixtures?select=id,home_team,away_team,home_score,away_score,fixture_date,ts,competition,stadium,status,liberado'),
+          supaGet<DbFixtureRow[]>('fixtures?select=*'),
         ])
         if (!active) return
         setSquadRows(squad)
@@ -912,7 +942,7 @@ function CompetitionCard({ name, abbr, position, played, points, form, color, bg
           </div>
           <div className="flex-1 min-w-0">
             <div className="font-display font-bold text-white truncate" style={{ fontSize: 12 }}>{name}</div>
-            <div className="text-[10px] mt-0.5" style={{ color: '#5070A0' }}>Temporada 2024</div>
+            <div className="text-[10px] mt-0.5" style={{ color: '#5070A0' }}>Temporada 2026</div>
           </div>
         </div>
 
@@ -1280,7 +1310,7 @@ function HomePage({ setPage, setSelectedPlayer, setSelectedMatch }: {
           <div className="flex items-center justify-between mb-5">
             <div>
               <h2 className="font-display font-black text-white" style={{ fontSize: 20 }}>Top Jogadores</h2>
-              <p className="text-xs mt-0.5" style={{ color: '#5070A0' }}>Melhores avaliados · Temporada 2024</p>
+              <p className="text-xs mt-0.5" style={{ color: '#5070A0' }}>Melhores avaliados · Temporada 2026</p>
             </div>
             <button onClick={() => setPage('rankings')}
               className="flex items-center gap-1 text-xs font-bold px-3 py-1.5 rounded-lg"
@@ -1476,7 +1506,7 @@ function RankingsPage({ setPage, setSelectedPlayer }: { setPage: (p: Page) => vo
       <div className="pt-8 pb-8">
         <div className="flex items-center gap-2 mb-3">
           <Trophy size={16} style={{ color: '#C4972A' }} />
-          <span className="text-xs font-bold tracking-widest uppercase" style={{ color: '#C4972A' }}>Temporada 2024</span>
+          <span className="text-xs font-bold tracking-widest uppercase" style={{ color: '#C4972A' }}>Temporada 2026</span>
         </div>
         <h2 className="font-display font-black text-white" style={{ fontSize: 36, lineHeight: 1.05 }}>
           Ranking de<br />
@@ -1639,7 +1669,7 @@ function PlayersPage({ setPage, setSelectedPlayer }: { setPage: (p: Page) => voi
     <div className="px-6 pb-12">
       <div className="pt-8 pb-6">
         <h2 className="font-display font-black text-white mb-1" style={{ fontSize: 32 }}>
-          Elenco <span style={{ background: 'linear-gradient(90deg, #4A8EE8, #1A5FCC)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>2024</span>
+          Elenco <span style={{ background: 'linear-gradient(90deg, #4A8EE8, #1A5FCC)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>2026</span>
         </h2>
         <p className="text-sm" style={{ color: '#5070A0' }}>{PLAYERS.length} jogadores · Todos avaliados</p>
       </div>
@@ -2139,32 +2169,40 @@ function MatchDetailPage({ match, onBack }: { match: Match; onBack: () => void }
         )}
 
         {tab === 'stats' && (
-          <div className="space-y-2.5">
-            {[
-              { label: 'Posse de Bola', home: 58, away: 42, unit: '%' },
-              { label: 'Finalizações', home: 14, away: 8, unit: '' },
-              { label: 'Chutes no Gol', home: 6, away: 3, unit: '' },
-              { label: 'Escanteios', home: 7, away: 4, unit: '' },
-              { label: 'Faltas', home: 11, away: 16, unit: '' },
-              { label: 'Cartões Amarelos', home: 2, away: 3, unit: '' },
-            ].map(({ label, home, away, unit }) => {
-              const total = home + away
-              const homePct = Math.round((home / total) * 100)
+          (() => {
+            const rows = STAT_FIELDS
+              .map(f => ({ ...f, ...(match.stats?.[f.key] ?? { home: null, away: null }) }))
+              .filter(r => r.home != null || r.away != null)
+            if (rows.length === 0) {
               return (
-                <div key={label} className="rounded-xl px-4 py-3" style={{ background: '#0A1528' }}>
-                  <div className="flex justify-between text-xs mb-2">
-                    <span className="font-bold text-white">{home}{unit}</span>
-                    <span style={{ color: '#5070A0' }}>{label}</span>
-                    <span className="font-bold" style={{ color: '#5070A0' }}>{away}{unit}</span>
-                  </div>
-                  <div className="flex h-1.5 rounded-full overflow-hidden gap-0.5">
-                    <div className="rounded-l-full" style={{ width: `${homePct}%`, background: 'linear-gradient(90deg, #1A5FCC, #4A8EE8)' }} />
-                    <div className="rounded-r-full flex-1" style={{ background: 'rgba(255,255,255,0.08)' }} />
-                  </div>
+                <div className="rounded-2xl px-6 py-10 text-center" style={{ background: '#0A1528', border: '1px solid rgba(255,255,255,0.05)' }}>
+                  <p className="text-sm" style={{ color: '#5070A0' }}>Estatísticas ainda não cadastradas para esta partida.</p>
                 </div>
               )
-            })}
-          </div>
+            }
+            return (
+              <div className="space-y-2.5">
+                {rows.map(({ label, home, away, unit }) => {
+                  const h = home ?? 0, a = away ?? 0
+                  const total = h + a
+                  const homePct = total > 0 ? Math.round((h / total) * 100) : 50
+                  return (
+                    <div key={label} className="rounded-xl px-4 py-3" style={{ background: '#0A1528' }}>
+                      <div className="flex justify-between text-xs mb-2">
+                        <span className="font-bold text-white">{h}{unit}</span>
+                        <span style={{ color: '#5070A0' }}>{label}</span>
+                        <span className="font-bold" style={{ color: '#5070A0' }}>{a}{unit}</span>
+                      </div>
+                      <div className="flex h-1.5 rounded-full overflow-hidden gap-0.5">
+                        <div className="rounded-l-full" style={{ width: `${homePct}%`, background: 'linear-gradient(90deg, #1A5FCC, #4A8EE8)' }} />
+                        <div className="rounded-r-full flex-1" style={{ background: 'rgba(255,255,255,0.08)' }} />
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )
+          })()
         )}
       </div>
     </div>
@@ -2492,7 +2530,10 @@ function AdminOverviewTab() {
   )
 }
 
-const EMPTY_MATCH_FORM = { id: '', home: 'Cruzeiro', away: '', comp: 'Campeonato Brasileiro', date: '', stadium: '', homeScore: '', awayScore: '', isNew: true }
+const emptyStats = (): Record<StatKey, { home: string; away: string }> =>
+  STAT_FIELDS.reduce((acc, f) => { acc[f.key] = { home: '', away: '' }; return acc }, {} as Record<StatKey, { home: string; away: string }>)
+
+const EMPTY_MATCH_FORM = { id: '', home: 'Cruzeiro', away: '', comp: 'Campeonato Brasileiro', date: '', stadium: '', homeScore: '', awayScore: '', isNew: true, stats: emptyStats() }
 
 function AdminMatchesTab() {
   const { matches: MATCHES, fixtureRows, reload } = useData()
@@ -2514,6 +2555,12 @@ function AdminMatchesTab() {
   const startEdit = (m: Match) => {
     const r = fixtureRows.find(x => x.id === m.dbId)
     if (!r) return
+    const stats = emptyStats()
+    for (const f of STAT_FIELDS) {
+      const h = (r as Record<string, unknown>)[`${f.key}_home`] as number | null | undefined
+      const a = (r as Record<string, unknown>)[`${f.key}_away`] as number | null | undefined
+      stats[f.key] = { home: h == null ? '' : String(h), away: a == null ? '' : String(a) }
+    }
     setForm({
       id: r.id,
       home: r.home_team,
@@ -2524,6 +2571,7 @@ function AdminMatchesTab() {
       homeScore: r.home_score == null ? '' : String(r.home_score),
       awayScore: r.away_score == null ? '' : String(r.away_score),
       isNew: false,
+      stats,
     })
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
@@ -2542,7 +2590,13 @@ function AdminMatchesTab() {
     setSaving(true)
     const ts = Math.floor(new Date(form.date).getTime() / 1000)
     const hasScores = form.homeScore !== '' && form.awayScore !== ''
-    const payload = {
+    const statCols: Record<string, number | null> = {}
+    for (const f of STAT_FIELDS) {
+      const s = form.stats[f.key]
+      statCols[`${f.key}_home`] = s.home === '' ? null : Number(s.home)
+      statCols[`${f.key}_away`] = s.away === '' ? null : Number(s.away)
+    }
+    const payload: Record<string, unknown> = {
       home_team: form.home.trim(),
       away_team: form.away.trim(),
       home_score: hasScores ? Number(form.homeScore) : null,
@@ -2552,6 +2606,7 @@ function AdminMatchesTab() {
       competition: form.comp.trim() || 'Amistoso',
       stadium: form.stadium.trim() || null,
       status: hasScores ? 'finished' : 'notstarted',
+      ...statCols,
     }
     let error: { message: string } | null = null
     if (form.isNew) {
@@ -2604,6 +2659,28 @@ function AdminMatchesTab() {
           </div>
         </div>
         <p className="text-[11px] mt-2" style={{ color: '#3A5070' }}>Deixe o placar em branco para jogo futuro. Preencha para um jogo já encerrado.</p>
+
+        {/* Estatísticas da partida */}
+        <div className="mt-5 pt-4" style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+          <div className="flex items-center justify-between mb-3">
+            <h4 className="font-display font-bold text-white" style={{ fontSize: 13 }}>Estatísticas da partida <span style={{ color: '#3A5070', fontWeight: 400 }}>(opcional)</span></h4>
+            <span className="text-[10px]" style={{ color: '#3A5070' }}>Mandante · Visitante</span>
+          </div>
+          <div className="space-y-2">
+            {STAT_FIELDS.map(f => (
+              <div key={f.key} className="flex items-center gap-3">
+                <span className="flex-1 text-[12px]" style={{ color: '#5070A0' }}>{f.label}{f.unit ? ` (${f.unit})` : ''}</span>
+                <input type="number" className={ADMIN_INPUT} style={{ ...ADMIN_INPUT_STYLE, width: 72, textAlign: 'center' }}
+                  value={form.stats[f.key].home}
+                  onChange={e => setForm(fm => ({ ...fm, stats: { ...fm.stats, [f.key]: { ...fm.stats[f.key], home: e.target.value } } }))} />
+                <input type="number" className={ADMIN_INPUT} style={{ ...ADMIN_INPUT_STYLE, width: 72, textAlign: 'center' }}
+                  value={form.stats[f.key].away}
+                  onChange={e => setForm(fm => ({ ...fm, stats: { ...fm.stats, [f.key]: { ...fm.stats[f.key], away: e.target.value } } }))} />
+              </div>
+            ))}
+          </div>
+        </div>
+
         <div className="flex gap-2 mt-4">
           <button onClick={save} disabled={saving}
             className="px-4 py-2.5 rounded-xl font-display font-bold text-white text-sm"
@@ -2921,6 +2998,14 @@ function AuthPage() {
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [forgot, setForgot] = useState(false)
   const [forgotSent, setForgotSent] = useState(false)
+  const [voters, setVoters] = useState(0)
+
+  // Real "torcedores avaliando" = distinct users who submitted a rating.
+  useEffect(() => {
+    supaGet<{ user_id: string }[]>('ratings?select=user_id')
+      .then(rows => setVoters(new Set(rows.map(r => r.user_id)).size))
+      .catch(() => {})
+  }, [])
 
   const set = (k: string) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setForm(f => ({ ...f, [k]: e.target.value }))
@@ -2964,16 +3049,6 @@ function AuthPage() {
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Falha na autenticação'
       setErrors({ email: msg })
-      setLoading(false)
-    }
-  }
-
-  const handleGuest = async () => {
-    setErrors({})
-    setLoading(true)
-    const { error } = await supabase.auth.signInAnonymously()
-    if (error) {
-      setErrors({ email: 'Modo visitante indisponível — crie uma conta para entrar.' })
       setLoading(false)
     }
   }
@@ -3064,7 +3139,7 @@ function AuthPage() {
           <div className="mb-3">
             <span className="text-xs font-bold tracking-widest uppercase px-3 py-1.5 rounded-full"
               style={{ background: 'rgba(196,151,42,0.15)', color: '#C4972A', border: '1px solid rgba(196,151,42,0.25)' }}>
-              Temporada 2024
+              Temporada 2026
             </span>
           </div>
           <h1 className="font-display font-black text-white mb-4" style={{ fontSize: 42, lineHeight: 1.05, letterSpacing: '-0.02em' }}>
@@ -3080,7 +3155,7 @@ function AuthPage() {
           {/* Social proof */}
           <div className="flex items-center gap-4">
             <div className="flex -space-x-2">
-              {['R', 'C', 'M', 'A'].map((l, i) => (
+              {['J', 'W', 'P', 'A'].map((l, i) => (
                 <div key={i} className="w-8 h-8 rounded-full flex items-center justify-center font-display font-black text-xs text-white border-2"
                   style={{ background: `linear-gradient(135deg, #003087, #1A5FCC)`, borderColor: '#030910' }}>
                   {l}
@@ -3088,7 +3163,7 @@ function AuthPage() {
               ))}
             </div>
             <div>
-              <div className="font-display font-bold text-white text-sm">+8.400 torcedores</div>
+              <div className="font-display font-bold text-white text-sm">+{(voters * 1000).toLocaleString('pt-BR')} torcedores</div>
               <div className="text-xs" style={{ color: 'rgba(255,255,255,0.35)' }}>já estão avaliando</div>
             </div>
           </div>
@@ -3156,14 +3231,6 @@ function AuthPage() {
               </Field>
             )}
 
-            {tab === 'login' && (
-              <div className="flex justify-end">
-                <button type="button" className="text-xs font-semibold" style={{ color: '#4A8EE8' }}>
-                  Esqueci minha senha
-                </button>
-              </div>
-            )}
-
             <button type="submit" disabled={loading}
               className="w-full py-3.5 rounded-2xl font-display font-bold text-white text-sm mt-2 transition-all duration-200 flex items-center justify-center gap-2"
               style={{
@@ -3188,20 +3255,6 @@ function AuthPage() {
               Esqueci minha senha
             </button>
           )}
-
-          {/* Divider */}
-          <div className="flex items-center gap-3 my-6">
-            <div className="flex-1 h-px" style={{ background: 'rgba(255,255,255,0.06)' }} />
-            <span className="text-xs" style={{ color: '#2A3A50' }}>ou</span>
-            <div className="flex-1 h-px" style={{ background: 'rgba(255,255,255,0.06)' }} />
-          </div>
-
-          {/* Guest access */}
-          <button onClick={handleGuest} disabled={loading}
-            className="w-full py-3 rounded-2xl text-sm font-semibold transition-all duration-150"
-            style={{ background: 'rgba(255,255,255,0.04)', color: '#5070A0', border: '1px solid rgba(255,255,255,0.06)' }}>
-            Continuar como visitante
-          </button>
 
           <p className="text-center text-xs mt-6" style={{ color: '#2A3A50' }}>
             Ao entrar você concorda com os{' '}
