@@ -2227,6 +2227,32 @@ function RatingPage() {
   const [hoveredRating, setHoveredRating] = useState<number | null>(null)
   const [submitted, setSubmitted] = useState(false)
   const [flash, setFlash] = useState(false)
+  const [prevScores, setPrevScores] = useState<Record<string, number>>({})
+  const seededRef = useRef<string | null>(null)
+
+  // Load this user's previous notes for the open match, so they can see what
+  // they already gave (and are about to overwrite). Also pre-fills the selectors.
+  useEffect(() => {
+    if (!user || !votingMatch?.dbId) return
+    if (seededRef.current === votingMatch.dbId) return
+    let active = true
+    supabase.from('ratings').select('player_id,score').eq('user_id', user.id).eq('fixture_id', votingMatch.dbId)
+      .then(({ data }) => {
+        if (!active || !data) return
+        seededRef.current = votingMatch.dbId ?? null
+        const byDbId: Record<string, number> = {}
+        const seed: Record<number, number> = {}
+        for (const row of data as { player_id: string; score: number }[]) {
+          byDbId[row.player_id] = Number(row.score)
+          const pl = allPlayers.find(p => p.dbId === row.player_id)
+          if (pl) seed[pl.id] = Number(row.score)
+        }
+        setPrevScores(byDbId)
+        // Merge: seeded previous notes first, current-session picks win.
+        setRatings(prev => ({ ...seed, ...prev }))
+      })
+    return () => { active = false }
+  }, [user, votingMatch?.dbId, allPlayers])
 
   const player = PLAYERS[currentIdx]
   const selected = ratings[player.id]
@@ -2243,22 +2269,35 @@ function RatingPage() {
   }
 
   const handleSubmit = async () => {
-    const finalRatings = { ...ratings }
-    PLAYERS.forEach(p => { if (finalRatings[p.id] === undefined) finalRatings[p.id] = 5 })
-    setRatings(finalRatings)
     if (user && votingMatch?.dbId) {
-      const rows = PLAYERS
-        .filter(p => p.dbId)
-        .map(p => ({
+      // Re-read the user's existing notes for THIS match at submit time. This makes
+      // saving independent of the async pre-load: a fast submit (before pre-load
+      // finishes) can no longer wipe untouched players back to 5.0.
+      const { data: existing } = await supabase.from('ratings')
+        .select('player_id,score').eq('user_id', user.id).eq('fixture_id', votingMatch.dbId)
+      const dbNotes: Record<string, number> = {}
+      for (const row of (existing ?? []) as { player_id: string; score: number }[]) {
+        dbNotes[row.player_id] = Number(row.score)
+      }
+      // Priority per player: value chosen this session > existing DB note > 5.0.
+      const rows = PLAYERS.filter(p => p.dbId).map(p => {
+        const dbId = p.dbId as string
+        return {
           user_id: user.id,
           user_name: user.name,
-          player_id: p.dbId as string,
+          player_id: dbId,
           fixture_id: votingMatch.dbId as string,
-          score: finalRatings[p.id] ?? 5,
-        }))
+          score: ratings[p.id] ?? dbNotes[dbId] ?? 5,
+        }
+      })
       const { error } = await supabase.from('ratings').upsert(rows, { onConflict: 'user_id,player_id,fixture_id' })
-      if (error) console.error('Falha ao salvar avaliações', error)
-      else reload()
+      if (error) { console.error('Falha ao salvar avaliações', error) }
+      else {
+        const finalLocal: Record<number, number> = {}
+        PLAYERS.forEach(p => { if (p.dbId) finalLocal[p.id] = ratings[p.id] ?? dbNotes[p.dbId] ?? 5 })
+        setRatings(finalLocal)
+        reload()
+      }
     }
     setSubmitted(true)
   }
@@ -2298,7 +2337,7 @@ function RatingPage() {
             </div>
           ))}
         </div>
-        <button onClick={() => { setSubmitted(false); setCurrentIdx(0); setRatings({}) }}
+        <button onClick={() => { setSubmitted(false); setCurrentIdx(0); setRatings({}); seededRef.current = null }}
           className="px-8 py-3 rounded-2xl font-display font-bold text-white text-sm"
           style={{ background: 'linear-gradient(135deg, #003087, #1A5FCC)', boxShadow: '0 4px 20px rgba(26,95,204,0.4)' }}>
           Avaliar Novamente
@@ -2323,6 +2362,13 @@ function RatingPage() {
         <div className="h-0.5 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.05)' }}>
           <div className="h-full rounded-full transition-all duration-500" style={{ width: `${progress}%`, background: 'linear-gradient(90deg, #003087, #4A8EE8)' }} />
         </div>
+        {Object.keys(prevScores).length > 0 && (
+          <div className="mt-3 rounded-xl px-4 py-2.5" style={{ background: 'rgba(196,151,42,0.10)', border: '1px solid rgba(196,151,42,0.25)' }}>
+            <span className="text-[12px]" style={{ color: '#C4972A' }}>
+              Você já avaliou esta partida. Suas notas anteriores estão carregadas abaixo — enviar de novo vai <strong>sobrescrevê-las</strong>.
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Two-column layout */}
@@ -2352,6 +2398,12 @@ function RatingPage() {
               <div className="text-center mt-3 mb-1">
                 <p className="text-sm font-semibold" style={{ color: '#7090B0' }}>Qual nota para {player.short}?</p>
               </div>
+            )}
+
+            {player.dbId && prevScores[player.dbId] !== undefined && (
+              <p className="text-center text-[11px] mt-1.5" style={{ color: '#C4972A' }}>
+                Sua nota anterior para {player.short}: <strong>{prevScores[player.dbId].toFixed(1)}</strong>
+              </p>
             )}
 
             <div className="grid grid-cols-5 gap-2 mt-4">
