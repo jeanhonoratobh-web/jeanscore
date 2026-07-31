@@ -43,28 +43,28 @@ alter table public.competition_status enable row level security;
 drop policy if exists "public read competition_status" on public.competition_status;
 create policy "public read competition_status" on public.competition_status for select using (true);
 
--- ─── Dados: Classificação Brasileirão 2026 (CBF, rodada 20) ─────────────────
+-- ─── Dados: Classificação Brasileirão 2026 (CBF, rodada 21) ─────────────────
 insert into public.standings
   (position, team, played, wins, draws, losses, goals_for, goals_against, goal_diff, points, is_cruzeiro) values
-  (1,'Palmeiras',20,13,5,2,34,16,18,44,false),
-  (2,'Flamengo',19,11,5,3,36,17,19,38,false),
-  (3,'Athletico-PR',20,11,3,6,28,19,9,36,false),
-  (4,'Fluminense',20,9,6,5,30,25,5,33,false),
-  (5,'RB Bragantino',20,9,4,7,26,20,6,31,false),
-  (6,'Bahia',20,8,7,5,29,25,4,31,false),
-  (7,'Botafogo',20,8,5,7,34,32,2,29,false),
-  (8,'Atlético-MG',20,8,4,8,25,25,0,28,false),
-  (9,'Corinthians',20,7,7,6,22,20,2,28,false),
-  (10,'Coritiba',20,7,6,7,25,27,-2,27,false),
-  (11,'Cruzeiro',20,7,6,7,26,30,-4,27,true),
+  (1,'Palmeiras',21,14,5,2,38,16,22,47,false),
+  (2,'Flamengo',20,11,6,3,37,18,19,39,false),
+  (3,'Athletico-PR',21,11,4,6,28,19,9,37,false),
+  (4,'Fluminense',21,9,7,5,30,25,5,34,false),
+  (5,'Bahia',21,8,8,5,29,25,4,32,false),
+  (6,'RB Bragantino',20,9,4,7,26,20,6,31,false),
+  (7,'Cruzeiro',21,8,6,7,27,30,-3,30,true),
+  (8,'Botafogo',20,8,5,7,34,32,2,29,false),
+  (9,'Corinthians',21,7,8,6,22,20,2,29,false),
+  (10,'Atlético-MG',20,8,4,8,25,25,0,28,false),
+  (11,'Coritiba',21,7,6,8,25,28,-3,27,false),
   (12,'São Paulo',20,7,5,8,25,23,2,26,false),
-  (13,'Vitória',20,7,5,8,22,27,-5,26,false),
-  (14,'Santos',20,5,7,8,29,33,-4,22,false),
-  (15,'Grêmio',20,5,7,8,22,26,-4,22,false),
-  (16,'Internacional',20,5,6,9,22,26,-4,21,false),
-  (17,'Vasco da Gama',20,5,6,9,23,31,-8,21,false),
-  (18,'Remo',20,5,6,9,23,32,-9,21,false),
-  (19,'Mirassol',19,5,5,9,21,26,-5,20,false),
+  (13,'Vitória',21,7,5,9,22,31,-9,26,false),
+  (14,'Mirassol',20,6,5,9,23,27,-4,23,false),
+  (15,'Santos',20,5,7,8,29,33,-4,22,false),
+  (16,'Internacional',21,5,7,9,23,27,-4,22,false),
+  (17,'Grêmio',20,5,7,8,22,26,-4,22,false),
+  (18,'Vasco da Gama',20,5,6,9,23,31,-8,21,false),
+  (19,'Remo',21,5,6,10,24,34,-10,21,false),
   (20,'Chapecoense',20,1,7,12,19,41,-22,10,false)
 on conflict (position) do update set
   team = excluded.team, played = excluded.played, wins = excluded.wins,
