@@ -409,10 +409,14 @@ function DataProvider({ children }: { children: ReactNode }) {
           }))
         }
         if (fixtures.length > 0) {
-          // Most recent results first, then upcoming fixtures in chronological order.
-          const finished = fixtures.filter((f) => f.status === 'finished').sort((a, b) => b.ts - a.ts)
-          const upcoming = fixtures.filter((f) => f.status !== 'finished').sort((a, b) => a.ts - b.ts)
-          setMatches([...finished, ...upcoming].map(mapFixtureRowToMatch))
+          // Map first so the status is derived from the current date, then bucket
+          // by that derived status: most recent results first, upcoming next.
+          // (The DB `status` column can be stale — e.g. a played game still marked
+          // "notstarted" — so we must not sort by it.)
+          const mapped = fixtures.map(mapFixtureRowToMatch)
+          const finished = mapped.filter((m) => m.status === 'finished').sort((a, b) => (b.ts ?? 0) - (a.ts ?? 0))
+          const upcoming = mapped.filter((m) => m.status !== 'finished').sort((a, b) => (a.ts ?? 0) - (b.ts ?? 0))
+          setMatches([...finished, ...upcoming])
         }
         if (active) {
           setRecentRatings(ratingRows.slice(0, 8))
