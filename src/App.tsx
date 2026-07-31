@@ -700,6 +700,60 @@ function CruzeiroCrest({ size = 32 }: { size?: number }) {
   )
 }
 
+/** Team crests (Brasileirão, Libertadores, Sul-Americana opponents). Source: TheSportsDB. */
+const TEAM_CRESTS: Record<string, string> = {
+  'Palmeiras': 'https://r2.thesportsdb.com/images/media/team/badge/vsqwqp1473538105.png',
+  'Flamengo': 'https://r2.thesportsdb.com/images/media/team/badge/syptwx1473538074.png',
+  'Athletico-PR': 'https://r2.thesportsdb.com/images/media/team/badge/irzu1u1554237406.png',
+  'Atlético-MG': 'https://r2.thesportsdb.com/images/media/team/badge/x5lixs1743742872.png',
+  'Bahia': 'https://r2.thesportsdb.com/images/media/team/badge/xuvtsv1473539308.png',
+  'RB Bragantino': 'https://r2.thesportsdb.com/images/media/team/badge/2p7tl41701423595.png',
+  'Red Bull Bragantino': 'https://r2.thesportsdb.com/images/media/team/badge/2p7tl41701423595.png',
+  'Botafogo': 'https://r2.thesportsdb.com/images/media/team/badge/bs5mbw1733004596.png',
+  'Corinthians': 'https://r2.thesportsdb.com/images/media/team/badge/vvuvps1473538042.png',
+  'Coritiba': 'https://r2.thesportsdb.com/images/media/team/badge/ywwsyu1473538050.png',
+  'Chapecoense': 'https://r2.thesportsdb.com/images/media/team/badge/wy0e1i1765900601.png',
+  'Fluminense': 'https://r2.thesportsdb.com/images/media/team/badge/stvvwp1473538082.png',
+  'Grêmio': 'https://r2.thesportsdb.com/images/media/team/badge/uvpwyt1473538089.png',
+  'Internacional': 'https://r2.thesportsdb.com/images/media/team/badge/yprvxx1473538097.png',
+  'Mirassol': 'https://r2.thesportsdb.com/images/media/team/badge/pw8uo11765900737.png',
+  'Remo': 'https://r2.thesportsdb.com/images/media/team/badge/u36jfy1579341655.png',
+  'Santos': 'https://r2.thesportsdb.com/images/media/team/badge/j8xk9g1679447486.png',
+  'São Paulo': 'https://r2.thesportsdb.com/images/media/team/badge/sxpupx1473538135.png',
+  'Vasco': 'https://r2.thesportsdb.com/images/media/team/badge/ynqlxo1630521109.png',
+  'Vasco da Gama': 'https://r2.thesportsdb.com/images/media/team/badge/ynqlxo1630521109.png',
+  'Vitória': 'https://r2.thesportsdb.com/images/media/team/badge/tysrrx1473538156.png',
+  'América-MG': 'https://r2.thesportsdb.com/images/media/team/badge/rtpp171752177342.png',
+  'Goiás': 'https://r2.thesportsdb.com/images/media/team/badge/qhfhdp1635869930.png',
+  'Barcelona Guayaquil': 'https://r2.thesportsdb.com/images/media/team/badge/c5yr001653075296.png',
+  'Boca Juniors': 'https://r2.thesportsdb.com/images/media/team/badge/bm7krb1775741582.png',
+  'Univ. Católica': 'https://r2.thesportsdb.com/images/media/team/badge/h2pcuc1602188028.png',
+  'Defensor Sporting': 'https://r2.thesportsdb.com/images/media/team/badge/dx13rd1703003044.png',
+  'Tombense': 'https://r2.thesportsdb.com/images/media/team/badge/1uj3n31579340660.png',
+  'Uberlândia': 'https://r2.thesportsdb.com/images/media/team/badge/ucyzoq1733810901.png',
+  'Betim': 'https://r2.thesportsdb.com/images/media/team/badge/3adbop1769912270.png',
+  'Pouso Alegre': 'https://r2.thesportsdb.com/images/media/team/badge/7kazoj1679129032.png',
+}
+
+function teamInitials(team: string): string {
+  const cleaned = team.replace(/[^0-9A-Za-zÀ-ÿ ]/g, '').trim()
+  const parts = cleaned.split(/\s+/).filter(Boolean)
+  const ini = parts.length > 1 ? parts.map(w => w[0]).join('') : cleaned
+  return (ini || team).slice(0, 3).toUpperCase()
+}
+
+/** Renders a team crest image (Cruzeiro uses the local asset); falls back to initials. */
+function TeamCrest({ team, size = 32 }: { team: string; size?: number }) {
+  if (isCruzeiro(team)) return <CruzeiroCrest size={size} />
+  const url = TEAM_CRESTS[team.trim()]
+  if (url) {
+    return <img src={url} alt={team} width={size} height={size}
+      style={{ objectFit: 'contain', display: 'block', userSelect: 'none' }} draggable={false}
+      onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }} />
+  }
+  return <span className="font-black text-white/60" style={{ fontSize: Math.max(10, Math.round(size * 0.34)) }}>{teamInitials(team)}</span>
+}
+
 function PosBadge({ pos }: { pos: Pos }) {
   return (
     <span className="text-[10px] font-bold px-1.5 py-0.5 rounded"
@@ -904,9 +958,9 @@ function MatchCard({ match, onClick }: { match: Match; onClick?: () => void }) {
 function TeamBlock({ name, isCruzeiro: isCruz, align = 'left' }: { name: string; isCruzeiro: boolean; align?: 'left' | 'right' }) {
   return (
     <div className={`flex flex-col gap-1.5 ${align === 'right' ? 'items-end' : 'items-start'}`} style={{ width: 120 }}>
-      <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+      <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 overflow-hidden"
         style={{ background: isCruz ? 'linear-gradient(135deg, #003087, #1A5FCC)' : '#101E30', border: '1px solid rgba(255,255,255,0.08)' }}>
-        {isCruz ? <CruzeiroCrest size={24} /> : <span className="text-white font-bold text-sm">{name.slice(0, 1)}</span>}
+        <TeamCrest team={name} size={28} />
       </div>
       <span className={`font-display font-semibold leading-tight ${align === 'right' ? 'text-right' : ''}`}
         style={{ fontSize: 13, color: isCruz ? 'white' : '#8098B0', maxWidth: 100 }}>
@@ -1209,8 +1263,8 @@ function HomePage({ setPage, setSelectedPlayer, setSelectedMatch }: {
                       <span className="font-display font-black" style={{ fontSize: 40, lineHeight: 1, color: 'rgba(255,255,255,0.5)' }}>{lastOppScore}</span>
                     </div>
                     <div className="flex flex-col items-center gap-2" style={{ width: 84 }}>
-                      <div className="w-12 h-12 rounded-2xl flex items-center justify-center" style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)' }}>
-                        <span className="font-black text-white/70 text-sm">{lastOpp.slice(0, 3).toUpperCase()}</span>
+                      <div className="w-12 h-12 rounded-2xl flex items-center justify-center overflow-hidden" style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)' }}>
+                        <TeamCrest team={lastOpp} size={34} />
                       </div>
                       <span className="font-display font-bold text-center" style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)' }}>{lastOpp}</span>
                     </div>
@@ -1263,8 +1317,8 @@ function HomePage({ setPage, setSelectedPlayer, setSelectedMatch }: {
                     </div>
                     <span className="font-display font-black" style={{ fontSize: 26, color: 'rgba(255,255,255,0.85)' }}>VS</span>
                     <div className="flex flex-col items-center gap-2" style={{ width: 84 }}>
-                      <div className="w-12 h-12 rounded-2xl flex items-center justify-center" style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)' }}>
-                        <span className="font-black text-white/70 text-sm">{nextOpp.slice(0, 3).toUpperCase()}</span>
+                      <div className="w-12 h-12 rounded-2xl flex items-center justify-center overflow-hidden" style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)' }}>
+                        <TeamCrest team={nextOpp} size={34} />
                       </div>
                       <span className="font-display font-bold text-center" style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)' }}>{nextOpp}</span>
                     </div>
@@ -1389,7 +1443,12 @@ function HomePage({ setPage, setSelectedPlayer, setSelectedMatch }: {
                         }}
                       >
                         <span className="font-display font-black" style={{ fontSize: 12, color: row.is_cruzeiro ? '#4A8EE8' : '#3A4A5A' }}>{row.position}</span>
-                        <span className="font-display font-semibold truncate" style={{ fontSize: 13, color: row.is_cruzeiro ? 'white' : '#8098B0' }}>{row.team}</span>
+                        <span className="flex items-center gap-2 min-w-0">
+                          <span className="flex-shrink-0 flex items-center justify-center" style={{ width: 20, height: 20 }}>
+                            <TeamCrest team={row.team} size={20} />
+                          </span>
+                          <span className="font-display font-semibold truncate" style={{ fontSize: 13, color: row.is_cruzeiro ? 'white' : '#8098B0' }}>{row.team}</span>
+                        </span>
                         {[row.played, row.wins, row.draws, row.losses, row.goals_for, row.goals_against, row.goal_diff, row.points].map((val, k) => (
                           <span key={k} className="font-display text-center" style={{ fontSize: 12, fontWeight: k === 7 ? 900 : 500, color: k === 7 ? (row.is_cruzeiro ? '#4A8EE8' : 'white') : '#7090B0' }}>{val}</span>
                         ))}
@@ -2106,9 +2165,9 @@ function MatchDetailPage({ match, onBack }: { match: Match; onBack: () => void }
           </div>
           <div className="flex items-center justify-center gap-10 py-4">
             <div className="flex flex-col items-center gap-3">
-              <div className="w-16 h-16 rounded-2xl flex items-center justify-center"
+              <div className="w-16 h-16 rounded-2xl flex items-center justify-center overflow-hidden"
                 style={{ background: isCruzeiro(match.home) ? 'linear-gradient(135deg, #003087, #1A5FCC)' : 'rgba(255,255,255,0.08)' }}>
-                {isCruzeiro(match.home) ? <CruzeiroCrest size={36} /> : <span className="font-black text-white/50 text-sm">{match.home.slice(0, 3)}</span>}
+                <TeamCrest team={match.home} size={44} />
               </div>
               <span className="font-display font-bold text-white text-center" style={{ fontSize: 14, maxWidth: 100 }}>{match.home}</span>
             </div>
@@ -2126,9 +2185,9 @@ function MatchDetailPage({ match, onBack }: { match: Match; onBack: () => void }
               </div>
             </div>
             <div className="flex flex-col items-center gap-3">
-              <div className="w-16 h-16 rounded-2xl flex items-center justify-center"
+              <div className="w-16 h-16 rounded-2xl flex items-center justify-center overflow-hidden"
                 style={{ background: isCruzeiro(match.away) ? 'linear-gradient(135deg, #003087, #1A5FCC)' : 'rgba(255,255,255,0.08)' }}>
-                {isCruzeiro(match.away) ? <CruzeiroCrest size={36} /> : <span className="font-black text-white/50 text-sm">{match.away.slice(0, 3)}</span>}
+                <TeamCrest team={match.away} size={44} />
               </div>
               <span className="font-display font-bold text-white text-center" style={{ fontSize: 14, maxWidth: 100 }}>{match.away}</span>
             </div>
