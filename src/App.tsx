@@ -2147,7 +2147,7 @@ function PlayerProfilePage({ player, onBack }: { player: Player; onBack: () => v
 // ─── Match Detail Page ────────────────────────────────────────────────────────
 
 function MatchDetailPage({ match, onBack }: { match: Match; onBack: () => void }) {
-  const { players: PLAYERS } = useData()
+  const { players: PLAYERS, ratings, fixturePlayers } = useData()
   const [tab, setTab] = useState<'lineup' | 'stats'>('lineup')
   return (
     <div className="pb-12">
@@ -2207,28 +2207,70 @@ function MatchDetailPage({ match, onBack }: { match: Match; onBack: () => void }
         </div>
 
         {tab === 'lineup' && (
-          <div>
-            <h3 className="font-display font-bold text-white mb-4" style={{ fontSize: 14 }}>Cruzeiro — Avaliações</h3>
-            <div className="grid grid-cols-2 gap-2">
-              {PLAYERS.slice(0, 8).map(p => (
-                <div key={p.id} className="flex items-center gap-3 px-3 py-2.5 rounded-xl"
-                  style={{ background: '#0A1528', border: '1px solid rgba(255,255,255,0.05)' }}>
-                  <div className="relative w-8 h-8 rounded-lg overflow-hidden flex-shrink-0"
-                    style={{ background: RARITY_CFG[p.rarity].photoGrad }}>
-                    <div className="w-full h-full flex items-center justify-center font-display font-black opacity-30 text-white" style={{ fontSize: 14 }}>{p.num}</div>
-                    {p.photo && (
-                      <img src={p.photo} alt={p.name} className="absolute inset-0 w-full h-full object-cover object-top select-none" draggable={false} />
-                    )}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-xs font-semibold text-white truncate">{p.short}</div>
-                    <PosBadge pos={p.pos} />
-                  </div>
-                  <span className="font-display font-black" style={{ fontSize: 15, color: RARITY_CFG[p.rarity].accent }}>{fmtRating(p.rating)}</span>
+          (() => {
+            // Average rating per player for THIS match only.
+            const byPlayer = new Map<string, { sum: number; n: number }>()
+            if (match.dbId) {
+              for (const r of ratings) {
+                if (r.fixture_id !== match.dbId) continue
+                const a = byPlayer.get(r.player_id) ?? { sum: 0, n: 0 }
+                a.sum += Number(r.score)
+                a.n += 1
+                byPlayer.set(r.player_id, a)
+              }
+            }
+            // Only the players selected for this match (fixture_players). If no lineup
+            // was saved, fall back to the players who received votes in this match.
+            const selectedIds = new Set(fixturePlayers.filter(fp => fp.fixture_id === match.dbId).map(fp => fp.player_id))
+            const played = (id: string) => selectedIds.size > 0 ? selectedIds.has(id) : byPlayer.has(id)
+            const lineup = PLAYERS
+              .filter(p => p.dbId && played(p.dbId))
+              .map(p => {
+                const agg = p.dbId ? byPlayer.get(p.dbId) : undefined
+                return { p, avg: agg ? agg.sum / agg.n : null, n: agg?.n ?? 0 }
+              })
+              .sort((a, b) => (b.avg ?? -1) - (a.avg ?? -1))
+            if (lineup.length === 0) {
+              return (
+                <div className="rounded-2xl px-6 py-10 text-center" style={{ background: '#0A1528', border: '1px solid rgba(255,255,255,0.05)' }}>
+                  <p className="text-sm" style={{ color: '#5070A0' }}>Escalação ainda não cadastrada para esta partida.</p>
                 </div>
-              ))}
-            </div>
-          </div>
+              )
+            }
+            return (
+              <div>
+                <div className="mb-4">
+                  <h3 className="font-display font-bold text-white" style={{ fontSize: 14 }}>Cruzeiro — Avaliações</h3>
+                  <p className="text-xs mt-0.5" style={{ color: '#3A5070' }}>Média da torcida nesta partida</p>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  {lineup.map(({ p, avg, n }) => {
+                    const rColor = avg == null ? '#3A5070' : avg >= 8 ? '#22C55E' : avg >= 6.5 ? '#F59E0B' : '#EF4444'
+                    return (
+                      <div key={p.id} className="flex items-center gap-3 px-3 py-2.5 rounded-xl"
+                        style={{ background: '#0A1528', border: '1px solid rgba(255,255,255,0.05)' }}>
+                        <div className="relative w-8 h-8 rounded-lg overflow-hidden flex-shrink-0"
+                          style={{ background: RARITY_CFG[p.rarity].photoGrad }}>
+                          <div className="w-full h-full flex items-center justify-center font-display font-black opacity-30 text-white" style={{ fontSize: 14 }}>{p.num}</div>
+                          {p.photo && (
+                            <img src={p.photo} alt={p.name} className="absolute inset-0 w-full h-full object-cover object-top select-none" draggable={false} />
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="text-xs font-semibold text-white truncate">{p.short}</div>
+                          <div className="flex items-center gap-1.5">
+                            <PosBadge pos={p.pos} />
+                            {n > 0 && <span className="text-[9px]" style={{ color: '#3A5070' }}>{n} {n === 1 ? 'voto' : 'votos'}</span>}
+                          </div>
+                        </div>
+                        <span className="font-display font-black" style={{ fontSize: 15, color: rColor }}>{avg != null ? avg.toFixed(1) : '—'}</span>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )
+          })()
         )}
 
         {tab === 'stats' && (
