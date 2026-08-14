@@ -3024,7 +3024,7 @@ function BolaoPage() {
         </div>
       ) : (
         <div className="mb-8">
-          <div className="flex gap-2 overflow-x-auto pb-2 mb-4">
+          <div className="flex flex-wrap gap-2 mb-4">
             {openMatches.map(m => {
               const active = m.dbId === selected?.dbId
               const hasPred = predictions.some(p => p.user_id === user?.id && p.fixture_id === m.dbId)
