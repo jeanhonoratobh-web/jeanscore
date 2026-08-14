@@ -12,12 +12,12 @@ import {
   TrendingUp, TrendingDown, Minus, MapPin, Clock, Award,
   Search, ArrowLeft, Shield, Target,
   Activity, Vote, Crown, Flame, CheckCircle,
-  BarChart2, Zap, Eye, Heart, LogOut,
+  BarChart2, Zap, Eye, Heart, LogOut, Dices, Lock,
 } from 'lucide-react'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type Page = 'home' | 'rankings' | 'players' | 'matches' | 'rate' | 'admin' | 'profile' | 'match-detail'
+type Page = 'home' | 'rankings' | 'players' | 'matches' | 'rate' | 'bolao' | 'admin' | 'profile' | 'match-detail'
 type Rarity = 'bronze' | 'silver' | 'gold' | 'legendary'
 type Pos = 'GK' | 'CB' | 'LB' | 'RB' | 'CDM' | 'CM' | 'CAM' | 'LW' | 'RW' | 'ST'
 
@@ -1043,6 +1043,7 @@ const NAV_ITEMS = [
   { id: 'players' as Page, icon: Users, label: 'Jogadores' },
   { id: 'matches' as Page, icon: Calendar, label: 'Partidas' },
   { id: 'rate' as Page, icon: Star, label: 'Votar' },
+  { id: 'bolao' as Page, icon: Dices, label: 'Bolão Cabuloso' },
 ]
 
 function Sidebar({ page, setPage }: { page: Page; setPage: (p: Page) => void }) {
@@ -2628,6 +2629,313 @@ function RatingPage() {
   )
 }
 
+// ─── Bolão Cabuloso ───────────────────────────────────────────────────────────
+
+interface DbPredictionRow {
+  id: string
+  user_id: string
+  user_name: string
+  fixture_id: string
+  home_pred: number
+  away_pred: number
+}
+
+/** Palpites fecham 1 minuto antes do início da partida. */
+const BET_CUTOFF_MS = 60_000
+
+/** Pontuação do bolão: 3 placar exato · 2 vencedor + saldo · 1 só vencedor/empate · 0 erro. */
+function predictionPoints(hp: number, ap: number, hs: number, as: number): number {
+  if (hp === hs && ap === as) return 3
+  const sign = (x: number) => (x > 0 ? 1 : x < 0 ? -1 : 0)
+  if (sign(hp - ap) !== sign(hs - as)) return 0
+  return hp - ap === hs - as ? 2 : 1
+}
+
+function fmtCountdown(ms: number): string {
+  const min = Math.floor(ms / 60000)
+  if (min < 1) return 'menos de 1min'
+  if (min < 60) return `${min}min`
+  const h = Math.floor(min / 60)
+  if (h < 24) return `${h}h${min % 60 > 0 ? ` ${min % 60}min` : ''}`
+  const d = Math.floor(h / 24)
+  return `${d}d ${h % 24}h`
+}
+
+/** Stepper de gols (0–20) usado no palpite. */
+function ScoreStepper({ value, onChange, disabled }: { value: number; onChange: (v: number) => void; disabled?: boolean }) {
+  const btn = 'w-9 h-9 rounded-xl font-display font-black text-lg flex items-center justify-center transition-all duration-100 select-none'
+  return (
+    <div className="flex flex-col items-center gap-2">
+      <button type="button" disabled={disabled || value >= 20} onClick={() => onChange(value + 1)}
+        className={btn} style={{ background: 'rgba(26,95,204,0.2)', color: '#4A8EE8', opacity: disabled ? 0.35 : 1 }}>+</button>
+      <span className="font-display font-black text-white" style={{ fontSize: 44, lineHeight: 1, minWidth: 56, textAlign: 'center' }}>{value}</span>
+      <button type="button" disabled={disabled || value <= 0} onClick={() => onChange(value - 1)}
+        className={btn} style={{ background: 'rgba(255,255,255,0.06)', color: '#5070A0', opacity: disabled ? 0.35 : 1 }}>−</button>
+    </div>
+  )
+}
+
+function BolaoPage() {
+  const { matches: MATCHES, fixtureRows, ratings } = useData()
+  const { user } = useAuth()
+  const [predictions, setPredictions] = useState<DbPredictionRow[]>([])
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [homePred, setHomePred] = useState(0)
+  const [awayPred, setAwayPred] = useState(0)
+  const [saving, setSaving] = useState(false)
+  const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null)
+  const [now, setNow] = useState(Date.now())
+
+  // Relógio leve para o countdown e para travar o formulário no horário certo.
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 15_000)
+    return () => clearInterval(t)
+  }, [])
+
+  const loadPredictions = () => {
+    supaGet<DbPredictionRow[]>('predictions?select=id,user_id,user_name,fixture_id,home_pred,away_pred')
+      .then(setPredictions)
+      .catch(() => { /* tabela ainda não criada */ })
+  }
+  useEffect(loadPredictions, [])
+
+  const cutoffOf = (m: Match) => (m.ts ?? 0) * 1000 - BET_CUTOFF_MS
+  // Partidas abertas para palpite: ainda não iniciadas e antes do corte de 1 min.
+  const openMatches = MATCHES
+    .filter(m => m.dbId && m.ts && cutoffOf(m) > now)
+    .sort((a, b) => (a.ts ?? 0) - (b.ts ?? 0))
+
+  const selected = openMatches.find(m => m.dbId === selectedId) ?? openMatches[0] ?? null
+  const myPrediction = selected ? predictions.find(p => p.user_id === user?.id && p.fixture_id === selected.dbId) : undefined
+
+  // Ao trocar de partida (ou carregar palpites), semeia o formulário com o palpite existente.
+  useEffect(() => {
+    setHomePred(myPrediction?.home_pred ?? 0)
+    setAwayPred(myPrediction?.away_pred ?? 0)
+    setMsg(null)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected?.dbId, myPrediction?.id])
+
+  const submit = async () => {
+    if (!user || !selected?.dbId) return
+    if (cutoffOf(selected) <= Date.now()) {
+      setMsg({ kind: 'err', text: 'Palpites encerrados para esta partida (fecham 1 min antes do início).' })
+      return
+    }
+    setSaving(true)
+    const { error } = await supabase.from('predictions').upsert({
+      user_id: user.id,
+      user_name: user.name,
+      fixture_id: selected.dbId,
+      home_pred: homePred,
+      away_pred: awayPred,
+    }, { onConflict: 'user_id,fixture_id' })
+    setSaving(false)
+    if (error) {
+      console.error('Falha ao salvar palpite', error)
+      setMsg({ kind: 'err', text: 'Não foi possível salvar. Os palpites fecham 1 min antes do jogo.' })
+    } else {
+      setMsg({ kind: 'ok', text: myPrediction ? 'Palpite atualizado!' : 'Palpite registrado! Você pode ajustar até 1 min antes do início.' })
+      loadPredictions()
+    }
+  }
+
+  // Placares finais reais (só jogos já iniciados e com placar preenchido no banco).
+  const finals = new Map<string, { hs: number; as: number }>()
+  for (const f of fixtureRows) {
+    if (f.home_score == null || f.away_score == null) continue
+    if ((f.ts ? f.ts * 1000 : new Date(f.fixture_date).getTime()) > now) continue
+    finals.set(f.id, { hs: f.home_score, as: f.away_score })
+  }
+
+  // Ranking geral: soma de pontos por usuário nos jogos encerrados.
+  const board = new Map<string, { name: string; pts: number; exact: number; n: number }>()
+  for (const p of predictions) {
+    const fin = finals.get(p.fixture_id)
+    if (!fin) continue
+    const pts = predictionPoints(p.home_pred, p.away_pred, fin.hs, fin.as)
+    const row = board.get(p.user_id) ?? { name: p.user_name, pts: 0, exact: 0, n: 0 }
+    row.pts += pts
+    row.n += 1
+    if (pts === 3) row.exact += 1
+    board.set(p.user_id, row)
+  }
+  // Desempate: 1) mais placares exatos · 2) mais votos (avaliações) na plataforma.
+  const votesBy = new Map<string, number>()
+  for (const r of ratings) votesBy.set(r.user_id, (votesBy.get(r.user_id) ?? 0) + 1)
+  const ranking = [...board.entries()]
+    .map(([uid, r]) => ({ uid, ...r, votes: votesBy.get(uid) ?? 0 }))
+    .sort((a, b) => b.pts - a.pts || b.exact - a.exact || b.votes - a.votes || a.name.localeCompare(b.name))
+
+  // Meus palpites (mais recentes primeiro), com pontos quando o jogo já encerrou.
+  const mine = predictions
+    .filter(p => p.user_id === user?.id)
+    .map(p => ({ p, match: MATCHES.find(m => m.dbId === p.fixture_id) ?? null, fin: finals.get(p.fixture_id) ?? null }))
+    .sort((a, b) => (b.match?.ts ?? 0) - (a.match?.ts ?? 0))
+
+  const ptsColor = (pts: number) => pts === 3 ? '#22C55E' : pts === 2 ? '#4A8EE8' : pts === 1 ? '#F59E0B' : '#EF4444'
+
+  return (
+    <div className="px-6 lg:px-10 py-6 pb-16 max-w-6xl">
+      {/* Regras */}
+      <div className="rounded-2xl p-5 mb-6" style={{ background: 'linear-gradient(135deg, rgba(0,48,135,0.35), rgba(26,95,204,0.12))', border: '1px solid rgba(26,95,204,0.25)' }}>
+        <div className="flex items-center gap-2 mb-3">
+          <Dices size={18} style={{ color: '#4A8EE8' }} />
+          <h2 className="font-display font-black text-white" style={{ fontSize: 18 }}>Bolão Cabuloso</h2>
+        </div>
+        <p className="text-xs mb-4" style={{ color: '#7090B0' }}>
+          Deixe seu palpite de placar para as próximas partidas. Um palpite por jogo, e ele pode ser
+          ajustado até 1 minuto antes da bola rolar.
+        </p>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+          {[
+            { pts: 3, label: 'Placar exato', ex: 'Apostou 2×1, deu 2×1', color: '#22C55E' },
+            { pts: 2, label: 'Vencedor + saldo', ex: 'Apostou 2×0, deu 3×1', color: '#4A8EE8' },
+            { pts: 1, label: 'Só o vencedor/empate', ex: 'Apostou 1×0, deu 3×0', color: '#F59E0B' },
+          ].map(r => (
+            <div key={r.pts} className="flex items-center gap-3 px-3 py-2.5 rounded-xl" style={{ background: 'rgba(5,13,27,0.5)' }}>
+              <span className="font-display font-black" style={{ fontSize: 22, color: r.color }}>{r.pts}<span className="text-[10px] ml-0.5">pt{r.pts > 1 ? 's' : ''}</span></span>
+              <div className="min-w-0">
+                <div className="text-xs font-bold text-white">{r.label}</div>
+                <div className="text-[10px]" style={{ color: '#5070A0' }}>{r.ex}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+        <p className="text-[10px] mt-3" style={{ color: '#5070A0' }}>
+          Desempate no ranking: 1º mais placares exatos · 2º mais votos (avaliações) na plataforma.
+        </p>
+      </div>
+
+      {/* Escolha da partida + palpite */}
+      <h3 className="font-display font-bold text-white mb-3" style={{ fontSize: 14 }}>Faça seu palpite</h3>
+      {openMatches.length === 0 ? (
+        <div className="rounded-2xl px-6 py-10 text-center mb-8" style={{ background: '#0A1528', border: '1px solid rgba(255,255,255,0.05)' }}>
+          <Lock size={22} className="mx-auto mb-2" style={{ color: '#2A3A50' }} />
+          <p className="text-sm" style={{ color: '#5070A0' }}>Nenhuma partida aberta para palpites no momento. Volte quando o próximo jogo for cadastrado.</p>
+        </div>
+      ) : (
+        <div className="mb-8">
+          <div className="flex gap-2 overflow-x-auto pb-2 mb-4">
+            {openMatches.map(m => {
+              const active = m.dbId === selected?.dbId
+              const hasPred = predictions.some(p => p.user_id === user?.id && p.fixture_id === m.dbId)
+              return (
+                <button key={m.dbId} onClick={() => setSelectedId(m.dbId!)}
+                  className="flex-shrink-0 px-4 py-2.5 rounded-xl text-left transition-all duration-150"
+                  style={{
+                    background: active ? 'linear-gradient(135deg, rgba(0,48,135,0.7), rgba(26,95,204,0.35))' : '#0A1528',
+                    border: active ? '1px solid rgba(26,95,204,0.5)' : '1px solid rgba(255,255,255,0.05)',
+                  }}>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-white whitespace-nowrap">{m.home} × {m.away}</span>
+                    {hasPred && <CheckCircle size={12} style={{ color: '#22C55E', flexShrink: 0 }} />}
+                  </div>
+                  <div className="text-[10px] whitespace-nowrap" style={{ color: active ? '#7FA8E0' : '#3A5070' }}>{m.date} · {m.comp}</div>
+                </button>
+              )
+            })}
+          </div>
+
+          {selected && (
+            <div className="rounded-2xl p-6" style={{ background: '#0A1528', border: '1px solid rgba(255,255,255,0.06)' }}>
+              <div className="text-center mb-1">
+                <span className="text-[11px] font-bold tracking-widest uppercase" style={{ color: '#5070A0' }}>{selected.comp}</span>
+              </div>
+              <div className="flex items-center justify-center gap-1.5 text-xs mb-5" style={{ color: '#3A5070' }}>
+                <Clock size={11} />
+                Palpites encerram em {fmtCountdown(cutoffOf(selected) - now)}
+              </div>
+              <div className="flex items-center justify-center gap-6 sm:gap-10">
+                <div className="flex flex-col items-center gap-2" style={{ width: 90 }}>
+                  <TeamCrest team={selected.home} size={44} />
+                  <span className="text-xs font-bold text-white text-center">{selected.home}</span>
+                </div>
+                <ScoreStepper value={homePred} onChange={setHomePred} disabled={saving} />
+                <span className="font-display font-thin" style={{ fontSize: 30, color: 'rgba(255,255,255,0.18)' }}>×</span>
+                <ScoreStepper value={awayPred} onChange={setAwayPred} disabled={saving} />
+                <div className="flex flex-col items-center gap-2" style={{ width: 90 }}>
+                  <TeamCrest team={selected.away} size={44} />
+                  <span className="text-xs font-bold text-white text-center">{selected.away}</span>
+                </div>
+              </div>
+              {msg && (
+                <p className="text-center text-xs mt-4 font-semibold" style={{ color: msg.kind === 'ok' ? '#22C55E' : '#EF4444' }}>{msg.text}</p>
+              )}
+              <button onClick={submit} disabled={saving}
+                className="w-full mt-5 py-3.5 rounded-2xl font-display font-bold text-white text-sm transition-all duration-200"
+                style={{ background: 'linear-gradient(135deg, #003087, #1A5FCC)', boxShadow: '0 4px 20px rgba(26,95,204,0.35)', opacity: saving ? 0.6 : 1 }}>
+                {saving ? 'Salvando...' : myPrediction ? 'Atualizar Palpite' : 'Enviar Palpite'}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Ranking + meus palpites */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div>
+          <h3 className="font-display font-bold text-white mb-3" style={{ fontSize: 14 }}>Ranking do Bolão</h3>
+          {ranking.length === 0 ? (
+            <div className="rounded-2xl px-6 py-8 text-center" style={{ background: '#0A1528', border: '1px solid rgba(255,255,255,0.05)' }}>
+              <p className="text-sm" style={{ color: '#5070A0' }}>Ainda não há pontos computados. Os pontos aparecem quando as partidas com palpites terminam.</p>
+            </div>
+          ) : (
+            <div className="rounded-2xl overflow-hidden" style={{ background: '#0A1528', border: '1px solid rgba(255,255,255,0.06)' }}>
+              {ranking.slice(0, 20).map((r, i) => (
+                <div key={r.uid} className="flex items-center gap-3 px-4 py-3"
+                  style={{
+                    borderBottom: i < Math.min(ranking.length, 20) - 1 ? '1px solid rgba(255,255,255,0.04)' : 'none',
+                    background: r.uid === user?.id ? 'rgba(26,95,204,0.1)' : 'transparent',
+                  }}>
+                  <span className="font-display font-black w-6 text-center" style={{ fontSize: 14, color: i === 0 ? '#E8C840' : i === 1 ? '#9AAAB8' : i === 2 ? '#C48040' : '#3A5070' }}>{i + 1}</span>
+                  {i === 0 && <Crown size={13} style={{ color: '#E8C840', flexShrink: 0 }} />}
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-semibold text-white truncate">{r.name}{r.uid === user?.id ? ' (você)' : ''}</div>
+                    <div className="text-[10px]" style={{ color: '#3A5070' }}>{r.n} {r.n === 1 ? 'palpite' : 'palpites'} · {r.exact} na mosca · {r.votes} {r.votes === 1 ? 'voto' : 'votos'}</div>
+                  </div>
+                  <span className="font-display font-black" style={{ fontSize: 18, color: '#4A8EE8' }}>{r.pts} <span className="text-[10px] font-bold" style={{ color: '#3A5070' }}>pts</span></span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div>
+          <h3 className="font-display font-bold text-white mb-3" style={{ fontSize: 14 }}>Meus Palpites</h3>
+          {mine.length === 0 ? (
+            <div className="rounded-2xl px-6 py-8 text-center" style={{ background: '#0A1528', border: '1px solid rgba(255,255,255,0.05)' }}>
+              <p className="text-sm" style={{ color: '#5070A0' }}>Você ainda não deixou nenhum palpite. Escolha uma partida acima e mande o seu!</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {mine.map(({ p, match: m, fin }) => {
+                const pts = fin ? predictionPoints(p.home_pred, p.away_pred, fin.hs, fin.as) : null
+                return (
+                  <div key={p.id} className="flex items-center gap-3 px-4 py-3 rounded-xl"
+                    style={{ background: '#0A1528', border: '1px solid rgba(255,255,255,0.05)' }}>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-bold text-white truncate">{m ? `${m.home} × ${m.away}` : 'Partida'}</div>
+                      <div className="text-[10px]" style={{ color: '#3A5070' }}>
+                        Palpite {p.home_pred}×{p.away_pred}{fin ? ` · Placar ${fin.hs}×${fin.as}` : m ? ` · ${m.date}` : ''}
+                      </div>
+                    </div>
+                    {pts != null ? (
+                      <span className="font-display font-black" style={{ fontSize: 16, color: ptsColor(pts) }}>+{pts} <span className="text-[10px] font-bold" style={{ color: '#3A5070' }}>pts</span></span>
+                    ) : (
+                      <span className="text-[10px] font-semibold px-2 py-1 rounded-full" style={{ background: 'rgba(26,95,204,0.15)', color: '#4A8EE8' }}>aguardando</span>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Admin Page ───────────────────────────────────────────────────────────────
 
 const ADMIN_INPUT = 'w-full px-3 py-2.5 rounded-xl text-sm text-white outline-none'
@@ -3451,7 +3759,7 @@ function Root() {
 
   const PAGE_TITLES: Record<Page, string> = {
     home: 'JeanScore', rankings: 'Rankings', players: 'Jogadores',
-    matches: 'Partidas', rate: 'Votar', admin: 'Admin',
+    matches: 'Partidas', rate: 'Votar', bolao: 'Bolão Cabuloso', admin: 'Admin',
     profile: selectedPlayer?.name ?? 'Perfil',
     'match-detail': selectedMatch ? `${selectedMatch.home} × ${selectedMatch.away}` : 'Partida',
   }
@@ -3489,6 +3797,7 @@ function Root() {
           <MatchesPage setPage={navigate} setSelectedMatch={setSelectedMatch} />
         )}
         {page === 'rate' && <RatingPage />}
+        {page === 'bolao' && <BolaoPage />}
         {page === 'admin' && isAdmin && <AdminPage />}
         {page === 'profile' && selectedPlayer && (
           <PlayerProfilePage player={selectedPlayer} onBack={() => setPage(prevPage)} />
