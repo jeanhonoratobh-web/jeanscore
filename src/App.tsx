@@ -1219,6 +1219,15 @@ function HomePage({ setPage, setSelectedPlayer, setSelectedMatch }: {
   const nextMatch = MATCHES.find(m => m.status === 'upcoming') ?? null
   const nextOpp = nextMatch ? (isCruzeiro(nextMatch.home) ? nextMatch.away : nextMatch.home) : ''
 
+  // Relógio leve para o countdown do bolão no card "Próximo Jogo".
+  const [now, setNow] = useState(Date.now())
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 30_000)
+    return () => clearInterval(t)
+  }, [])
+  const bolaoCutoff = nextMatch?.ts ? nextMatch.ts * 1000 - BET_CUTOFF_MS : 0
+  const bolaoOpen = bolaoCutoff > now
+
   const [activeForm, setActiveForm] = useState<'W' | 'D' | 'L' | null>(null)
 
   return (
@@ -1336,6 +1345,19 @@ function HomePage({ setPage, setSelectedPlayer, setSelectedMatch }: {
                       </div>
                     )}
                   </div>
+                  {bolaoOpen && (
+                    <div className="flex flex-col items-center gap-1.5 mt-4">
+                      <button onClick={() => setPage('bolao')}
+                        className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-bold"
+                        style={{ background: 'rgba(196,151,42,0.18)', color: '#E8C840', border: '1px solid rgba(196,151,42,0.3)' }}>
+                        <Dices size={13} /> Dar meu palpite
+                      </button>
+                      <div className="flex items-center gap-1 text-[10px]" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                        <Clock size={10} />
+                        Palpites encerram em {fmtCountdown(bolaoCutoff - now)}
+                      </div>
+                    </div>
+                  )}
                 </>
               ) : (
                 <p className="text-sm text-center py-8" style={{ color: 'rgba(255,255,255,0.4)' }}>Sem jogos futuros agendados.</p>
