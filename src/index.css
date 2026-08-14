@@ -139,3 +139,28 @@ html, body {
 .bronze-glow {
   box-shadow: 0 0 12px rgba(168, 96, 48, 0.25), 0 0 30px rgba(168, 96, 48, 0.08);
 }
+
+/* Barra de rolagem visível (fina) para faixas horizontais, ex.: partidas do bolão. */
+.scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(26, 95, 204, 0.55) rgba(255, 255, 255, 0.05);
+}
+
+.scrollbar-thin::-webkit-scrollbar {
+  display: block;
+  height: 6px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 999px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: rgba(26, 95, 204, 0.55);
+  border-radius: 999px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb:hover {
+  background: rgba(74, 142, 232, 0.7);
+}

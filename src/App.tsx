@@ -3024,22 +3024,25 @@ function BolaoPage() {
         </div>
       ) : (
         <div className="mb-8">
-          <div className="flex flex-wrap gap-2 mb-4">
+          {/* Uma linha só: 4 partidas visíveis, barra de rolagem para as demais. */}
+          <div className="flex gap-2 overflow-x-auto scrollbar-thin pb-2.5 mb-4">
             {openMatches.map(m => {
               const active = m.dbId === selected?.dbId
               const hasPred = predictions.some(p => p.user_id === user?.id && p.fixture_id === m.dbId)
               return (
                 <button key={m.dbId} onClick={() => setSelectedId(m.dbId!)}
-                  className="flex-shrink-0 px-4 py-2.5 rounded-xl text-left transition-all duration-150"
+                  className="px-4 py-2.5 rounded-xl text-left transition-all duration-150 overflow-hidden"
                   style={{
+                    flex: '0 0 calc((100% - 24px) / 4)',
+                    minWidth: 190,
                     background: active ? 'linear-gradient(135deg, rgba(0,48,135,0.7), rgba(26,95,204,0.35))' : '#0A1528',
                     border: active ? '1px solid rgba(26,95,204,0.5)' : '1px solid rgba(255,255,255,0.05)',
                   }}>
                   <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold text-white whitespace-nowrap">{m.home} × {m.away}</span>
+                    <span className="text-xs font-bold text-white whitespace-nowrap truncate">{m.home} × {m.away}</span>
                     {hasPred && <CheckCircle size={12} style={{ color: '#22C55E', flexShrink: 0 }} />}
                   </div>
-                  <div className="text-[10px] whitespace-nowrap" style={{ color: active ? '#7FA8E0' : '#3A5070' }}>{m.date} · {m.comp}</div>
+                  <div className="text-[10px] whitespace-nowrap truncate" style={{ color: active ? '#7FA8E0' : '#3A5070' }}>{m.date} · {m.comp}</div>
                 </button>
               )
             })}
