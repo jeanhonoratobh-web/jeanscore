@@ -1189,7 +1189,8 @@ function HomePage({ setPage, setSelectedPlayer, setSelectedMatch }: {
   setSelectedPlayer: (p: Player) => void
   setSelectedMatch: (m: Match) => void
 }) {
-  const { players: PLAYERS, matches: MATCHES, standings, competitions, recentRatings } = useData()
+  const { players: PLAYERS, matches: MATCHES, standings, competitions, recentRatings, fixtureRows, ratings } = useData()
+  const { user } = useAuth()
   const topPlayers = [...PLAYERS].sort((a, b) => b.rating - a.rating).slice(0, 5)
   const playerNameById = (dbId: string) => PLAYERS.find(p => p.dbId === dbId)?.name ?? 'Jogador'
   // Hero cards: most recent finished match + next upcoming match.
@@ -1228,6 +1229,16 @@ function HomePage({ setPage, setSelectedPlayer, setSelectedMatch }: {
   const bolaoCutoff = nextMatch?.ts ? nextMatch.ts * 1000 - BET_CUTOFF_MS : 0
   const bolaoOpen = bolaoCutoff > now
 
+  // Placar geral do Bolão Cabuloso (card do hero).
+  const [bolaoPreds, setBolaoPreds] = useState<DbPredictionRow[]>([])
+  useEffect(() => {
+    supaGet<DbPredictionRow[]>('predictions?select=id,user_id,user_name,fixture_id,home_pred,away_pred')
+      .then(setBolaoPreds)
+      .catch(() => { /* tabela ainda não criada */ })
+  }, [])
+  const bolaoRanking = computeBolaoRanking(bolaoPreds, finalScores(fixtureRows, now), ratings)
+  const myBolaoIdx = bolaoRanking.findIndex(r => r.uid === user?.id)
+
   const [activeForm, setActiveForm] = useState<'W' | 'D' | 'L' | null>(null)
 
   return (
@@ -1251,7 +1262,7 @@ function HomePage({ setPage, setSelectedPlayer, setSelectedMatch }: {
         <div className="absolute" style={{ top: '20%', right: '10%', width: 2, height: '60%', background: 'linear-gradient(180deg, transparent, rgba(196,151,42,0.15), transparent)', transform: 'rotate(12deg)' }} />
 
         <div className="relative z-10 px-6 pt-10 pb-14">
-          <div className="grid gap-4" style={{ gridTemplateColumns: '1fr 1fr', maxWidth: 780 }}>
+          <div className="grid gap-4" style={{ gridTemplateColumns: '1fr 1fr 1fr', maxWidth: 1180 }}>
             {/* Último Jogo */}
             <div className="rounded-2xl p-5" style={{ background: 'rgba(5,13,27,0.62)', border: '1px solid rgba(255,255,255,0.08)', backdropFilter: 'blur(8px)' }}>
               <div className="flex items-center justify-between mb-4">
@@ -1361,6 +1372,58 @@ function HomePage({ setPage, setSelectedPlayer, setSelectedMatch }: {
                 </>
               ) : (
                 <p className="text-sm text-center py-8" style={{ color: 'rgba(255,255,255,0.4)' }}>Sem jogos futuros agendados.</p>
+              )}
+            </div>
+
+            {/* Placar Geral do Bolão */}
+            <div className="rounded-2xl p-5 flex flex-col" style={{ background: 'rgba(5,13,27,0.62)', border: '1px solid rgba(255,255,255,0.08)', backdropFilter: 'blur(8px)' }}>
+              <div className="flex items-center justify-between mb-4">
+                <span className="text-[10px] font-bold tracking-widest uppercase" style={{ color: '#E8C840' }}>Bolão Cabuloso</span>
+                <span className="text-[10px]" style={{ color: 'rgba(255,255,255,0.35)' }}>Placar Geral</span>
+              </div>
+              {bolaoRanking.length === 0 ? (
+                <div className="flex-1 flex flex-col items-center justify-center gap-3 py-4">
+                  <Dices size={22} style={{ color: 'rgba(255,255,255,0.25)' }} />
+                  <p className="text-sm text-center" style={{ color: 'rgba(255,255,255,0.4)', maxWidth: 220 }}>
+                    Ainda sem pontos computados. Deixe seu palpite e entre na disputa!
+                  </p>
+                  <button onClick={() => setPage('bolao')}
+                    className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-bold"
+                    style={{ background: 'rgba(196,151,42,0.18)', color: '#E8C840', border: '1px solid rgba(196,151,42,0.3)' }}>
+                    <Dices size={13} /> Participar
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <div className="flex-1 space-y-1.5">
+                    {bolaoRanking.slice(0, 5).map((r, i) => (
+                      <div key={r.uid} className="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg"
+                        style={{ background: r.uid === user?.id ? 'rgba(26,95,204,0.22)' : 'rgba(255,255,255,0.03)' }}>
+                        <span className="font-display font-black w-4 text-center flex-shrink-0"
+                          style={{ fontSize: 12, color: i === 0 ? '#E8C840' : i === 1 ? '#9AAAB8' : i === 2 ? '#C48040' : '#3A5070' }}>{i + 1}</span>
+                        {i === 0 && <Crown size={11} style={{ color: '#E8C840', flexShrink: 0 }} />}
+                        <span className="flex-1 min-w-0 text-xs font-semibold text-white truncate">{r.name}{r.uid === user?.id ? ' (você)' : ''}</span>
+                        <span className="font-display font-black flex-shrink-0" style={{ fontSize: 14, color: '#4A8EE8' }}>
+                          {r.pts} <span className="text-[9px] font-bold" style={{ color: '#3A5070' }}>pts</span>
+                        </span>
+                      </div>
+                    ))}
+                    {myBolaoIdx >= 5 && (
+                      <div className="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg" style={{ background: 'rgba(26,95,204,0.22)' }}>
+                        <span className="font-display font-black w-4 text-center flex-shrink-0" style={{ fontSize: 12, color: '#3A5070' }}>{myBolaoIdx + 1}</span>
+                        <span className="flex-1 min-w-0 text-xs font-semibold text-white truncate">{bolaoRanking[myBolaoIdx].name} (você)</span>
+                        <span className="font-display font-black flex-shrink-0" style={{ fontSize: 14, color: '#4A8EE8' }}>
+                          {bolaoRanking[myBolaoIdx].pts} <span className="text-[9px] font-bold" style={{ color: '#3A5070' }}>pts</span>
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                  <button onClick={() => setPage('bolao')}
+                    className="mt-3 w-full py-2 rounded-xl text-xs font-bold"
+                    style={{ background: 'rgba(26,95,204,0.15)', color: '#4A8EE8', border: '1px solid rgba(26,95,204,0.3)' }}>
+                    Ver bolão completo
+                  </button>
+                </>
               )}
             </div>
           </div>
@@ -2789,6 +2852,46 @@ function fmtCountdown(ms: number): string {
   return `${d}d ${h % 24}h`
 }
 
+/** Placares finais reais: só jogos já iniciados e com placar preenchido no banco. */
+function finalScores(fixtureRows: DbFixtureRow[], now: number): Map<string, { hs: number; as: number }> {
+  const finals = new Map<string, { hs: number; as: number }>()
+  for (const f of fixtureRows) {
+    if (f.home_score == null || f.away_score == null) continue
+    if ((f.ts ? f.ts * 1000 : new Date(f.fixture_date).getTime()) > now) continue
+    finals.set(f.id, { hs: f.home_score, as: f.away_score })
+  }
+  return finals
+}
+
+interface BolaoRankRow { uid: string; name: string; pts: number; exact: number; n: number; votes: number }
+
+/**
+ * Placar geral do bolão: soma de pontos por usuário nos jogos encerrados.
+ * Desempate: 1) mais placares exatos · 2) mais votos (avaliações) na plataforma.
+ */
+function computeBolaoRanking(
+  predictions: DbPredictionRow[],
+  finals: Map<string, { hs: number; as: number }>,
+  ratings: DbRatingRow[],
+): BolaoRankRow[] {
+  const board = new Map<string, { name: string; pts: number; exact: number; n: number }>()
+  for (const p of predictions) {
+    const fin = finals.get(p.fixture_id)
+    if (!fin) continue
+    const pts = predictionPoints(p.home_pred, p.away_pred, fin.hs, fin.as)
+    const row = board.get(p.user_id) ?? { name: p.user_name, pts: 0, exact: 0, n: 0 }
+    row.pts += pts
+    row.n += 1
+    if (pts === 3) row.exact += 1
+    board.set(p.user_id, row)
+  }
+  const votesBy = new Map<string, number>()
+  for (const r of ratings) votesBy.set(r.user_id, (votesBy.get(r.user_id) ?? 0) + 1)
+  return [...board.entries()]
+    .map(([uid, r]) => ({ uid, ...r, votes: votesBy.get(uid) ?? 0 }))
+    .sort((a, b) => b.pts - a.pts || b.exact - a.exact || b.votes - a.votes || a.name.localeCompare(b.name))
+}
+
 /** Stepper de gols (0–20) usado no palpite. */
 function ScoreStepper({ value, onChange, disabled }: { value: number; onChange: (v: number) => void; disabled?: boolean }) {
   const btn = 'w-9 h-9 rounded-xl font-display font-black text-lg flex items-center justify-center transition-all duration-100 select-none'
@@ -2868,32 +2971,9 @@ function BolaoPage() {
     }
   }
 
-  // Placares finais reais (só jogos já iniciados e com placar preenchido no banco).
-  const finals = new Map<string, { hs: number; as: number }>()
-  for (const f of fixtureRows) {
-    if (f.home_score == null || f.away_score == null) continue
-    if ((f.ts ? f.ts * 1000 : new Date(f.fixture_date).getTime()) > now) continue
-    finals.set(f.id, { hs: f.home_score, as: f.away_score })
-  }
-
-  // Ranking geral: soma de pontos por usuário nos jogos encerrados.
-  const board = new Map<string, { name: string; pts: number; exact: number; n: number }>()
-  for (const p of predictions) {
-    const fin = finals.get(p.fixture_id)
-    if (!fin) continue
-    const pts = predictionPoints(p.home_pred, p.away_pred, fin.hs, fin.as)
-    const row = board.get(p.user_id) ?? { name: p.user_name, pts: 0, exact: 0, n: 0 }
-    row.pts += pts
-    row.n += 1
-    if (pts === 3) row.exact += 1
-    board.set(p.user_id, row)
-  }
-  // Desempate: 1) mais placares exatos · 2) mais votos (avaliações) na plataforma.
-  const votesBy = new Map<string, number>()
-  for (const r of ratings) votesBy.set(r.user_id, (votesBy.get(r.user_id) ?? 0) + 1)
-  const ranking = [...board.entries()]
-    .map(([uid, r]) => ({ uid, ...r, votes: votesBy.get(uid) ?? 0 }))
-    .sort((a, b) => b.pts - a.pts || b.exact - a.exact || b.votes - a.votes || a.name.localeCompare(b.name))
+  // Placares finais reais + placar geral (com desempate).
+  const finals = finalScores(fixtureRows, now)
+  const ranking = computeBolaoRanking(predictions, finals, ratings)
 
   // Meus palpites (mais recentes primeiro), com pontos quando o jogo já encerrou.
   const mine = predictions
