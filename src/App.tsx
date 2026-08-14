@@ -2148,8 +2148,19 @@ function PlayerProfilePage({ player, onBack }: { player: Player; onBack: () => v
 // ─── Match Detail Page ────────────────────────────────────────────────────────
 
 function MatchDetailPage({ match, onBack }: { match: Match; onBack: () => void }) {
-  const { players: PLAYERS, ratings, fixturePlayers } = useData()
-  const [tab, setTab] = useState<'lineup' | 'stats'>('lineup')
+  const { players: PLAYERS, ratings, fixturePlayers, fixtureRows } = useData()
+  const { user } = useAuth()
+  const [tab, setTab] = useState<'lineup' | 'stats' | 'bolao'>('lineup')
+  const [preds, setPreds] = useState<DbPredictionRow[]>([])
+  const [predQuery, setPredQuery] = useState('')
+
+  // Palpites do bolão desta partida.
+  useEffect(() => {
+    if (!match.dbId) return
+    supaGet<DbPredictionRow[]>(`predictions?select=id,user_id,user_name,fixture_id,home_pred,away_pred&fixture_id=eq.${match.dbId}`)
+      .then(setPreds)
+      .catch(() => { /* tabela ainda não criada */ })
+  }, [match.dbId])
   return (
     <div className="pb-12">
       <div className="relative overflow-hidden" style={{ minHeight: 280 }}>
@@ -2198,11 +2209,11 @@ function MatchDetailPage({ match, onBack }: { match: Match; onBack: () => void }
 
       <div className="px-6">
         <div className="flex gap-1 p-1 rounded-2xl mb-6" style={{ background: '#0A1528' }}>
-          {(['lineup', 'stats'] as const).map(t => (
+          {(['lineup', 'stats', 'bolao'] as const).map(t => (
             <button key={t} onClick={() => setTab(t)}
               className="flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all duration-150"
               style={{ background: tab === t ? '#003087' : 'transparent', color: tab === t ? 'white' : '#5070A0' }}>
-              {t === 'lineup' ? 'Escalação' : 'Estatísticas'}
+              {t === 'lineup' ? 'Escalação' : t === 'stats' ? 'Estatísticas' : 'Bolão Cabuloso'}
             </button>
           ))}
         </div>
@@ -2306,6 +2317,101 @@ function MatchDetailPage({ match, onBack }: { match: Match; onBack: () => void }
                     </div>
                   )
                 })}
+              </div>
+            )
+          })()
+        )}
+
+        {tab === 'bolao' && (
+          (() => {
+            // Placar final real (só vale se o jogo já começou e o placar foi preenchido).
+            const row = fixtureRows.find(f => f.id === match.dbId)
+            const kicked = (match.ts ?? 0) * 1000 <= Date.now()
+            const final = kicked && row && row.home_score != null && row.away_score != null
+              ? { hs: row.home_score, as: row.away_score } : null
+
+            const myPred = preds.find(p => p.user_id === user?.id) ?? null
+            const others = preds
+              .filter(p => p.user_id !== user?.id)
+              .filter(p => p.user_name.toLowerCase().includes(predQuery.trim().toLowerCase()))
+              .map(p => ({ p, pts: final ? predictionPoints(p.home_pred, p.away_pred, final.hs, final.as) : null }))
+              .sort((a, b) => (b.pts ?? -1) - (a.pts ?? -1) || a.p.user_name.localeCompare(b.p.user_name))
+
+            const ptsColor = (pts: number) => pts === 3 ? '#22C55E' : pts === 2 ? '#4A8EE8' : pts === 1 ? '#F59E0B' : '#EF4444'
+            const PtsBadge = ({ pts }: { pts: number }) => (
+              <span className="font-display font-black" style={{ fontSize: 15, color: ptsColor(pts) }}>
+                +{pts} <span className="text-[10px] font-bold" style={{ color: '#3A5070' }}>pts</span>
+              </span>
+            )
+
+            return (
+              <div>
+                {/* Meu Palpite */}
+                <h3 className="font-display font-bold text-white mb-3" style={{ fontSize: 14 }}>Meu Palpite</h3>
+                {myPred ? (
+                  <div className="rounded-2xl px-5 py-4 mb-6 flex items-center justify-between"
+                    style={{ background: 'linear-gradient(135deg, rgba(0,48,135,0.35), rgba(26,95,204,0.12))', border: '1px solid rgba(26,95,204,0.3)' }}>
+                    <div className="flex items-center gap-4">
+                      <Dices size={18} style={{ color: '#4A8EE8' }} />
+                      <div>
+                        <div className="font-display font-black text-white" style={{ fontSize: 24, lineHeight: 1 }}>
+                          {myPred.home_pred} <span style={{ color: 'rgba(255,255,255,0.25)', fontWeight: 300 }}>×</span> {myPred.away_pred}
+                        </div>
+                        <div className="text-[10px] mt-1" style={{ color: '#5070A0' }}>{match.home} × {match.away}</div>
+                      </div>
+                    </div>
+                    {final ? (
+                      <PtsBadge pts={predictionPoints(myPred.home_pred, myPred.away_pred, final.hs, final.as)} />
+                    ) : (
+                      <span className="text-[10px] font-semibold px-2 py-1 rounded-full" style={{ background: 'rgba(26,95,204,0.15)', color: '#4A8EE8' }}>aguardando resultado</span>
+                    )}
+                  </div>
+                ) : (
+                  <div className="rounded-2xl px-5 py-5 mb-6 text-center" style={{ background: '#0A1528', border: '1px solid rgba(255,255,255,0.05)' }}>
+                    <p className="text-sm" style={{ color: '#5070A0' }}>
+                      Você não deixou palpite para esta partida{kicked ? '.' : ' — ainda dá tempo! Vá na aba Bolão Cabuloso do menu.'}
+                    </p>
+                  </div>
+                )}
+
+                {/* Palpites da torcida + busca */}
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="font-display font-bold text-white" style={{ fontSize: 14 }}>Palpites da Torcida</h3>
+                  <span className="text-[10px]" style={{ color: '#3A5070' }}>{preds.length} {preds.length === 1 ? 'palpite' : 'palpites'}</span>
+                </div>
+                <div className="relative mb-3">
+                  <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2" style={{ color: '#3A5070' }} />
+                  <input value={predQuery} onChange={e => setPredQuery(e.target.value)}
+                    placeholder="Buscar torcedor..."
+                    className="w-full pl-9 pr-4 py-2.5 rounded-xl text-sm outline-none text-white"
+                    style={{ background: '#0A1528', border: '1px solid rgba(255,255,255,0.07)' }} />
+                </div>
+                {others.length === 0 ? (
+                  <div className="rounded-2xl px-6 py-8 text-center" style={{ background: '#0A1528', border: '1px solid rgba(255,255,255,0.05)' }}>
+                    <p className="text-sm" style={{ color: '#5070A0' }}>
+                      {preds.length === 0 ? 'Ainda não há palpites para esta partida.'
+                        : predQuery.trim() ? 'Nenhum torcedor encontrado com esse nome.'
+                        : 'Nenhum outro torcedor palpitou ainda.'}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="rounded-2xl overflow-hidden" style={{ background: '#0A1528', border: '1px solid rgba(255,255,255,0.06)' }}>
+                    {others.map(({ p, pts }, i) => (
+                      <div key={p.id} className="flex items-center gap-3 px-4 py-3"
+                        style={{ borderBottom: i < others.length - 1 ? '1px solid rgba(255,255,255,0.04)' : 'none' }}>
+                        <div className="w-7 h-7 rounded-full flex items-center justify-center font-bold text-[11px] flex-shrink-0"
+                          style={{ background: 'rgba(26,95,204,0.18)', color: '#4A8EE8' }}>
+                          {p.user_name.charAt(0).toUpperCase()}
+                        </div>
+                        <span className="flex-1 min-w-0 text-sm font-semibold text-white truncate">{p.user_name}</span>
+                        <span className="font-display font-black text-white" style={{ fontSize: 16 }}>
+                          {p.home_pred} <span style={{ color: 'rgba(255,255,255,0.25)', fontWeight: 300 }}>×</span> {p.away_pred}
+                        </span>
+                        {pts != null && <div className="w-14 text-right"><PtsBadge pts={pts} /></div>}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )
           })()
